@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     libxcb1 \
     libxcb-shm0 \
     libxcb-xfixes0 \
-    libgl1-mesa-glx \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
