@@ -1,16 +1,24 @@
 FROM python:3.10-slim
 
+# Instalar dependencias del sistema para OpenCV
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libxcb1 \
+    libxcb-shm0 \
+    libxcb-xfixes0 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copiar e instalar dependencias
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código de la app
 COPY backend/ .
 
-# Exponer el puerto que usará Cloud Run (siempre 8080)
 EXPOSE 8080
 
-# Comando para ejecutar la app con Gunicorn (servidor HTTP para producción)
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
