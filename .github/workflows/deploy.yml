@@ -30,6 +30,4 @@ jobs:
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_CLI_EXPERIMENTS: webframeworks
-        run: |
-          firebase experiments:enable webframeworks
-          firebase deploy --only hosting --project chess-pdf-fen
+        run: firebase deploy --only hosting --project chess-pdf-fen
