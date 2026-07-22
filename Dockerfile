@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-# Instalar dependencias del sistema para OpenCV
+# Instalar dependencias del sistema para OpenCV y PyTorch
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libsm6 \
@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Instalar PyTorch y torchvision (CPU-only, más liviano)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
