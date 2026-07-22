@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess PDF to FEN</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>♟️ Chess PDF to FEN</h1>
+        <p>Sube un libro de ajedrez en PDF y obtén otro PDF con los FEN de cada diagrama.</p>
+
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="file-input-wrapper">
+                <label for="pdfFile" class="file-label">📂 Seleccionar PDF</label>
+                <input type="file" id="pdfFile" name="pdf" accept=".pdf" required>
+            </div>
+            <button type="submit" id="submitBtn">🚀 Procesar PDF</button>
+        </form>
+
+        <div id="status" class="status-message"></div>
+        <div id="progress" class="progress-bar" style="display:none;">
+            <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

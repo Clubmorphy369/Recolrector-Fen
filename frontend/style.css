@@ -1,0 +1,109 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    background: white;
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+h1 {
+    font-size: 2.2rem;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+p {
+    color: #7f8c8d;
+    margin-bottom: 30px;
+}
+
+.file-input-wrapper {
+    margin-bottom: 20px;
+}
+
+.file-label {
+    display: inline-block;
+    background: #ecf0f1;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #2c3e50;
+    border: 2px dashed #bdc3c7;
+    transition: all 0.3s;
+    width: 100%;
+}
+
+.file-label:hover {
+    background: #d5dbdb;
+    border-color: #95a5a6;
+}
+
+#pdfFile {
+    display: none;
+}
+
+button {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 14px 30px;
+    border-radius: 30px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+    width: 100%;
+    margin-top: 10px;
+}
+
+button:hover:not(:disabled) {
+    background: #2980b9;
+}
+
+button:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.status-message {
+    margin-top: 25px;
+    font-weight: 500;
+    color: #2c3e50;
+    min-height: 30px;
+}
+
+.progress-bar {
+    width: 100%;
+    background: #ecf0f1;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 10px;
+    margin-top: 15px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #2ecc71;
+    width: 0%;
+    transition: width 0.3s;
+}
