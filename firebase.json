@@ -3,6 +3,11 @@
     "source": "./backend",
     "framework": "flask",
     "entryPoint": "app:app",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "frameworksBackend": {
       "region": "us-central1"
     }
