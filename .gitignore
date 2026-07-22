@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.pdf
+
+# Firebase
+.firebase/
+*.log
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
