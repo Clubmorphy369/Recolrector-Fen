@@ -1,11 +1,8 @@
 {
   "hosting": {
     "source": "./backend",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
+    "framework": "flask",
+    "entryPoint": "app:app",
     "frameworksBackend": {
       "region": "us-central1"
     }
