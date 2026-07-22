@@ -3,3 +3,4 @@ chesspdftofen==0.5.0
 Werkzeug==2.3.7
 gunicorn==21.2.0
 torch
+torchvision
