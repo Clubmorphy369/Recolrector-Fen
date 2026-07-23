@@ -13,6 +13,7 @@ import traceback
 import shutil
 from datetime import datetime, timezone
 import re
+import chess
 
 # Intentar importar PyPDF2 para contar páginas
 try:
@@ -30,6 +31,37 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
+
+# ---------- FUNCIÓN PARA LIMPIAR Y VALIDAR FEN ----------
+def clean_and_validate_fen(raw_fen):
+    """
+    Limpia el FEN devuelto por Chessvision.ai:
+    - Reemplaza '_' por ' '.
+    - Trunca a 6 campos (el formato estándar).
+    - Valida con python-chess.
+    Retorna el FEN limpio si es válido, o None si no lo es.
+    """
+    if not raw_fen:
+        return None
+    # Reemplazar guiones bajos por espacios
+    fen = raw_fen.replace('_', ' ')
+    # Dividir en campos y quedarse con los 6 primeros
+    parts = fen.split()
+    if len(parts) > 6:
+        fen = ' '.join(parts[:6])
+    elif len(parts) < 6:
+        # Si tiene menos de 6 campos, intentar rellenar con campos por defecto
+        # Pero en la práctica, Chessvision.ai devuelve siempre 6 o más
+        return None
+    # Validar con python-chess
+    try:
+        board = chess.Board(fen)
+        if board.is_valid():
+            return fen
+        else:
+            return None
+    except:
+        return None
 
 @app.route('/')
 def index():
@@ -158,7 +190,7 @@ def process_image_bytes(image_bytes):
             img.save(buffer, format='JPEG', quality=75)
             image_bytes = buffer.getvalue()
         elif img.size[0] < 40 or img.size[1] < 40:
-            return "Imagen demasiado pequeña"
+            return None  # Imagen demasiado pequeña
 
         encoded_string = base64.b64encode(image_bytes).decode('utf-8')
         payload = {
@@ -177,15 +209,22 @@ def process_image_bytes(image_bytes):
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                return data.get('result')
+                raw_fen = data.get('result')
+                # Limpiar y validar el FEN
+                clean_fen = clean_and_validate_fen(raw_fen)
+                if clean_fen:
+                    return clean_fen
+                else:
+                    return None  # FEN inválido
             else:
-                return f"Error: {data.get('message', 'Error desconocido')}"
+                return None
         else:
-            return f"Error HTTP {response.status_code}"
+            return None
     except requests.exceptions.Timeout:
-        return "Timeout"
+        return None
     except Exception as e:
-        return f"Error: {str(e)[:50]}"
+        print(f"[ERROR] process_image_bytes: {e}")
+        return None
 
 # ---------- ENDPOINT DE SUBIDA ----------
 @app.route('/upload', methods=['POST'])
@@ -258,13 +297,22 @@ def upload_files():
                             board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
                             for board_idx, board_bytes in enumerate(board_images):
                                 fen = process_image_bytes(board_bytes)
-                                results.append({
-                                    'file': filename,
-                                    'page': page_num,
-                                    'board': board_idx + 1,
-                                    'fen': fen if fen else None,
-                                    'error': None if fen else 'No se pudo obtener FEN'
-                                })
+                                if fen:
+                                    results.append({
+                                        'file': filename,
+                                        'page': page_num,
+                                        'board': board_idx + 1,
+                                        'fen': fen,
+                                        'error': None
+                                    })
+                                else:
+                                    results.append({
+                                        'file': filename,
+                                        'page': page_num,
+                                        'board': board_idx + 1,
+                                        'fen': None,
+                                        'error': 'FEN inválido'
+                                    })
                         except Exception as e:
                             print(f"[ERROR] Página {page_num}: {traceback.format_exc()}")
                             results.append({'file': filename, 'page': page_num, 'error': f'Error en página {page_num}: {str(e)[:80]}'})
@@ -276,12 +324,20 @@ def upload_files():
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
                     for board_idx, board_bytes in enumerate(board_images):
                         fen = process_image_bytes(board_bytes)
-                        results.append({
-                            'file': filename,
-                            'board': board_idx + 1,
-                            'fen': fen if fen else None,
-                            'error': None if fen else 'No se pudo obtener FEN'
-                        })
+                        if fen:
+                            results.append({
+                                'file': filename,
+                                'board': board_idx + 1,
+                                'fen': fen,
+                                'error': None
+                            })
+                        else:
+                            results.append({
+                                'file': filename,
+                                'board': board_idx + 1,
+                                'fen': None,
+                                'error': 'FEN inválido'
+                            })
                 except Exception as e:
                     print(f"[ERROR] Imagen {filename}: {traceback.format_exc()}")
                     results.append({'file': filename, 'error': f'Error: {str(e)[:80]}'})
@@ -296,7 +352,7 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- EXPORTAR PGN CON FORMATO LICHESS (CORREGIDO) ----------
+# ---------- EXPORTAR PGN CON FORMATO LICHESS ----------
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
@@ -311,7 +367,6 @@ def export_pgn():
         if len(fens) > 64:
             fens = fens[:64]
         
-        # Obtener fecha y hora actual en formato UTC
         now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y.%m.%d")
         time_str = now.strftime("%H:%M:%S")
@@ -334,13 +389,12 @@ def export_pgn():
             pgn_lines.append(f'[UTCDate "{date_str}"]')
             pgn_lines.append(f'[UTCTime "{time_str}"]')
             pgn_lines.append('[ChapterMode "gamebook"]')
-            pgn_lines.append("")  # Línea en blanco
-            pgn_lines.append(" *")  # Espacio + asterisco
-            pgn_lines.append("")  # Línea en blanco entre capítulos
+            pgn_lines.append("")
+            pgn_lines.append(" *")
+            pgn_lines.append("")
         
         pgn_text = "\n".join(pgn_lines)
         
-        # Generar nombre de archivo estilo Lichess
         safe_study_name = re.sub(r'[^a-zA-Z0-9-]', '-', study_name).lower()
         safe_user = re.sub(r'[^a-zA-Z0-9-]', '-', user).lower()
         filename = f"lichess_study_{safe_study_name}_by_{safe_user}_{date_str.replace('.', '-')}.pgn"
