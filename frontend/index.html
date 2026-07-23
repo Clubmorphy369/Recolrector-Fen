@@ -9,6 +9,9 @@
         h1 { color: #2c3e50; }
         .upload-area { border: 2px dashed #3498db; padding: 2rem; text-align: center; border-radius: 8px; }
         input[type="file"] { margin: 1rem 0; }
+        .pages-input { margin: 1rem 0; }
+        .pages-input label { font-weight: bold; }
+        .pages-input input { padding: 0.5rem; width: 200px; }
         button { background: #3498db; color: white; border: none; padding: 0.5rem 2rem; border-radius: 4px; cursor: pointer; }
         button:hover { background: #2980b9; }
         #result { margin-top: 2rem; overflow-x: auto; }
@@ -19,15 +22,19 @@
         .success { color: #27ae60; }
         .status { margin-top: 1rem; font-weight: bold; }
         .fen-cell { font-family: monospace; font-size: 0.8rem; word-break: break-all; }
+        .info { font-size: 0.9rem; color: #555; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
     <h1>♟️ Chess PDF to FEN</h1>
-    <p>Sube imágenes o PDFs de ajedrez. Se extraerá el FEN de cada tablero (máximo 3 archivos, 3 páginas por PDF).</p>
+    <p>Sube imágenes o PDFs. Para PDFs, elige hasta 3 páginas (ej: 1,3,5).</p>
     <div class="upload-area">
         <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="fileInput" name="files" accept="image/*, application/pdf" multiple required>
-            <br>
+            <div class="pages-input">
+                <label for="pages">Páginas (PDF, separadas por comas):</label>
+                <input type="text" id="pages" name="pages" placeholder="ej: 1,3,5" value="1">
+            </div>
             <button type="submit">Procesar archivos</button>
         </form>
     </div>
@@ -47,6 +54,9 @@
             for (const file of files) {
                 formData.append('files', file);
             }
+            // Añadir las páginas seleccionadas
+            const pagesInput = document.getElementById('pages');
+            formData.append('pages', pagesInput.value);
 
             const statusDiv = document.getElementById('status');
             const resultDiv = document.getElementById('result');
