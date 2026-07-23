@@ -29,6 +29,8 @@
         .btn-copy { background: #2ecc71; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-copy:hover { background: #27ae60; }
         .btn-copy.used { background: #95a5a6; cursor: not-allowed; }
+        .btn-toggle-turn { background: #f39c12; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .btn-toggle-turn:hover { background: #e67e22; }
         .btn-export { background: #2c3e50; color: white; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 1rem; }
         .btn-export:hover { background: #1a252f; }
         .stats { margin-top: 1rem; font-size: 0.95rem; color: #333; }
@@ -104,6 +106,17 @@
             }
         });
 
+        // ---------- FUNCIÓN PARA ALTERNAR TURNO EN UN FEN ----------
+        function toggleTurn(fen) {
+            const parts = fen.split(' ');
+            if (parts.length >= 3) {
+                // Alternar w <-> b
+                parts[2] = parts[2] === 'w' ? 'b' : 'w';
+                return parts.join(' ');
+            }
+            return fen;
+        }
+
         // ---------- SUBIDA Y PROCESAMIENTO ----------
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -154,6 +167,7 @@
                             <th>Página</th>
                             <th>Tablero</th>
                             <th>FEN</th>
+                            <th>Turno</th>
                             <th>Acción</th>
                         </tr></thead><tbody>`;
                         for (const item of uniqueResults) {
@@ -166,6 +180,9 @@
                                 <td>${page}</td>
                                 <td>${board}</td>
                                 <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
+                                <td>
+                                    ${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}">🔄</button>` : '-'}
+                                </td>
                                 <td>
                                     <button class="btn-copy" data-fen="${fen}" ${isError ? 'disabled' : ''}>
                                         ${isError ? 'Error' : '📋 Copiar y eliminar'}
@@ -180,6 +197,28 @@
                         html += `<div class="stats">Total FEN obtenidos: ${total} | FEN únicos: ${uniqueCount} | Duplicados eliminados: ${duplicates}</div>`;
                     }
                     resultDiv.innerHTML = html;
+
+                    // ---------- FUNCIONALIDAD ALTERNAR TURNO ----------
+                    document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const fen = this.getAttribute('data-fen');
+                            if (!fen) return;
+                            const newFen = toggleTurn(fen);
+                            const row = this.closest('tr');
+                            const fenCell = row.querySelector('.fen-cell');
+                            // Actualizar celda FEN
+                            fenCell.textContent = newFen;
+                            // Actualizar atributo data-fen de la fila
+                            row.setAttribute('data-fen', newFen);
+                            // Actualizar atributo del botón
+                            this.setAttribute('data-fen', newFen);
+                            // Actualizar también el botón de copiar (data-fen)
+                            const copyBtn = row.querySelector('.btn-copy');
+                            if (copyBtn) copyBtn.setAttribute('data-fen', newFen);
+                            // Si el FEN cambió, también podríamos actualizar la tabla de estadísticas
+                            // pero no es necesario.
+                        });
+                    });
 
                     // ---------- FUNCIONALIDAD COPIAR Y ELIMINAR ----------
                     document.querySelectorAll('.btn-copy').forEach(btn => {
