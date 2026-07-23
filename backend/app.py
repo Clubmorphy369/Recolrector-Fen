@@ -11,6 +11,7 @@ from PIL import Image
 import io
 import traceback
 import shutil
+from datetime import datetime, timezone
 
 # Intentar importar PyPDF2 para contar páginas
 try:
@@ -294,30 +295,49 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- EXPORTAR PGN (con formato correcto para Lichess) ----------
+# ---------- EXPORTAR PGN CON FORMATO LICHESS ----------
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
         data = request.get_json()
         fens = data.get('fens', [])
+        study_name = data.get('study_name', 'Mi Estudio de Ajedrez')
+        user = data.get('user', 'Anónimo')
+        
         if not fens:
             return jsonify({'error': 'No se proporcionaron FEN'}), 400
         
-        # Limitar a 64 capítulos (máximo permitido por Lichess)
         if len(fens) > 64:
             fens = fens[:64]
         
-        # Construir el PGN con formato válido para Lichess
+        # Obtener fecha y hora actual en formato UTC
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%Y.%m.%d")
+        time_str = now.strftime("%H:%M:%S")
+        
         pgn_lines = []
-        for fen in fens:
-            # Cada capítulo debe tener [SetUp "1"] y [FEN "..."]
-            pgn_lines.append('[SetUp "1"]')
+        for idx, fen in enumerate(fens, 1):
+            chapter_name = f"Capítulo {idx}"
+            
+            pgn_lines.append(f'[Event "{study_name}: {chapter_name}"]')
+            pgn_lines.append(f'[Date "{date_str}"]')
+            pgn_lines.append('[Result "*"]')
+            pgn_lines.append('[Variant "Standard"]')
+            pgn_lines.append('[ECO "?"]')
+            pgn_lines.append('[Opening "?"]')
+            pgn_lines.append(f'[StudyName "{study_name}"]')
+            pgn_lines.append(f'[ChapterName "{chapter_name}"]')
+            pgn_lines.append(f'[Annotator "https://lichess.org/@/{user}"]')
             pgn_lines.append(f'[FEN "{fen}"]')
-            pgn_lines.append("*")  # Marcador de final de juego
-            pgn_lines.append("")   # Línea en blanco entre capítulos
+            pgn_lines.append('[SetUp "1"]')
+            pgn_lines.append(f'[UTCDate "{date_str}"]')
+            pgn_lines.append(f'[UTCTime "{time_str}"]')
+            pgn_lines.append("")
+            pgn_lines.append(" *")
+            pgn_lines.append("")
+        
         pgn_text = "\n".join(pgn_lines)
         
-        # Crear respuesta como archivo descargable
         response = Response(pgn_text, mimetype='text/plain')
         response.headers.set("Content-Disposition", "attachment", filename="fen_study.pgn")
         return response
