@@ -1,39 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #2c3e50; }
+        .upload-area { border: 2px dashed #3498db; padding: 2rem; text-align: center; border-radius: 8px; }
+        input[type="file"] { margin: 1rem 0; }
+        button { background: #3498db; color: white; border: none; padding: 0.5rem 2rem; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2980b9; }
+        #result { margin-top: 2rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+        th { background: #f2f2f2; }
+        .error { color: #e74c3c; }
+        .success { color: #27ae60; }
+        .status { margin-top: 1rem; font-weight: bold; }
+    </style>
 </head>
 <body>
     <h1>♟️ Chess PDF to FEN</h1>
-    <p>Sube una imagen de un tablero de ajedrez y obtén el FEN.</p>
-    <form id="uploadForm" enctype="multipart/form-data">
-        <input type="file" id="fileInput" name="file" accept="image/*" required>
-        <button type="submit">Procesar</button>
-    </form>
+    <p>Sube imágenes o PDFs de tableros de ajedrez. Se extraerá el FEN de cada página/imagen.</p>
+    <div class="upload-area">
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="files" accept="image/*, application/pdf" multiple required>
+            <br>
+            <button type="submit">Procesar archivos</button>
+        </form>
+    </div>
+    <div id="status" class="status"></div>
     <div id="result"></div>
+
     <script>
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData();
             const fileInput = document.getElementById('fileInput');
-            formData.append('file', fileInput.files[0]);
-            
+            const files = fileInput.files;
+            if (files.length === 0) {
+                alert('Selecciona al menos un archivo.');
+                return;
+            }
+            for (const file of files) {
+                formData.append('files', file);
+            }
+
+            const statusDiv = document.getElementById('status');
             const resultDiv = document.getElementById('result');
-            resultDiv.textContent = 'Procesando...';
-            
+            statusDiv.textContent = 'Procesando...';
+            resultDiv.innerHTML = '';
+
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
                 const data = await response.json();
-                if (data.success) {
-                    resultDiv.textContent = `FEN: ${data.fen}`;
+                statusDiv.textContent = 'Procesamiento completado.';
+
+                if (data.success && data.results) {
+                    let html = '<h3>Resultados</h3><table><tr><th>Archivo</th><th>Página</th><th>FEN</th></tr>';
+                    let successCount = 0;
+                    for (const item of data.results) {
+                        const fen = item.fen || item.error || 'Error';
+                        const isError = !item.fen;
+                        const page = item.page || '-';
+                        html += `<tr>
+                            <td>${item.file}</td>
+                            <td>${page}</td>
+                            <td class="${isError ? 'error' : 'success'}">${fen}</td>
+                        </tr>`;
+                        if (item.fen) successCount++;
+                    }
+                    html += '</table>';
+                    html += `<p>Procesados: ${data.results.length}, FEN obtenidos: ${successCount}</p>`;
+                    resultDiv.innerHTML = html;
                 } else {
-                    resultDiv.textContent = `Error: ${data.error}`;
+                    resultDiv.innerHTML = `<p class="error">Error: ${data.error || 'Respuesta inesperada'}</p>`;
                 }
             } catch (error) {
-                resultDiv.textContent = `Error: ${error.message}`;
+                statusDiv.textContent = 'Error';
+                resultDiv.innerHTML = `<p class="error">Error de red: ${error.message}</p>`;
             }
         });
     </script>
