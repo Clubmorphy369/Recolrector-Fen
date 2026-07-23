@@ -28,10 +28,6 @@ def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
 def split_grid(image, rows=3, cols=2):
-    """
-    Divide una imagen en una cuadrícula de rows x cols.
-    Retorna una lista de bytes de cada recorte.
-    """
     h, w = image.shape[:2]
     cell_h = h // rows
     cell_w = w // cols
@@ -42,7 +38,6 @@ def split_grid(image, rows=3, cols=2):
             y1 = r * cell_h
             x2 = (c + 1) * cell_w
             y2 = (r + 1) * cell_h
-            # Margen pequeño para evitar bordes negros
             margin = 10
             x1c = max(0, x1 + margin)
             y1c = max(0, y1 + margin)
@@ -55,22 +50,15 @@ def split_grid(image, rows=3, cols=2):
     return cropped
 
 def detect_boards_in_image(image_bytes, use_grid=False):
-    """
-    Detecta múltiples tableros en una imagen.
-    Si use_grid=True, divide la imagen en una cuadrícula fija (3 filas x 2 columnas).
-    Si use_grid=False, intenta detección por contornos y fallback a cuadrícula.
-    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
             return [image_bytes]
 
-        # Si se solicita forzar la cuadrícula, hacerlo directamente
         if use_grid:
             return split_grid(img, rows=3, cols=2)
 
-        # ----- MÉTODO 1: Detección por contornos (para imágenes sueltas) -----
         h, w = img.shape[:2]
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -79,7 +67,6 @@ def detect_boards_in_image(image_bytes, use_grid=False):
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
 
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
         board_rects = []
         min_area = 5000
         for cnt in contours:
@@ -108,7 +95,6 @@ def detect_boards_in_image(image_bytes, use_grid=False):
                 cropped.append(buffer.tobytes())
             return cropped
 
-        # ----- MÉTODO 2: Fallback por cuadrícula (3 filas x 2 columnas) -----
         return split_grid(img, rows=3, cols=2)
 
     except Exception as e:
@@ -116,9 +102,7 @@ def detect_boards_in_image(image_bytes, use_grid=False):
         return [image_bytes]
 
 def process_image_bytes(image_bytes):
-    """Envía la imagen a Chessvision.ai y devuelve el FEN."""
     try:
-        # Redimensionar si es muy grande
         img = Image.open(io.BytesIO(image_bytes))
         if img.size[0] > 1500 or img.size[1] > 1500:
             img.thumbnail((1500, 1500))
@@ -173,7 +157,6 @@ def upload_files():
 
         if ext == 'pdf':
             try:
-                # Convertir PDF a imágenes (una por página)
                 images = convert_from_bytes(file_bytes, dpi=300)
                 if len(images) > 20:
                     images = images[:20]
@@ -181,8 +164,6 @@ def upload_files():
                     img_bytes = io.BytesIO()
                     img.save(img_bytes, format='JPEG', quality=95)
                     img_bytes.seek(0)
-
-                    # 🔥 FORZAR CUADRÍCULA para PDFs (3 filas x 2 columnas)
                     board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
                     for board_idx, board_bytes in enumerate(board_images):
                         fen = process_image_bytes(board_bytes)
@@ -196,7 +177,6 @@ def upload_files():
             except Exception as e:
                 results.append({'file': filename, 'error': f'Error PDF: {str(e)}'})
         elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
-            # Para imágenes sueltas: intentar detección automática
             board_images = detect_boards_in_image(file_bytes, use_grid=False)
             for board_idx, board_bytes in enumerate(board_images):
                 fen = process_image_bytes(board_bytes)
