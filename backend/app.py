@@ -25,7 +25,7 @@ except ImportError:
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -78,8 +78,7 @@ def split_grid(image, rows=3, cols=2, margin=10):
                 y2c = min(h, y2 - margin)
                 if x2c > x1c and y2c > y1c:
                     crop = image[y1c:y2c, x1c:x2c]
-                    _, buffer = cv2.imencode('.jpg', crop)
-                    cropped.append(buffer.tobytes())
+                    cropped.append(crop)
         return cropped
     except Exception as e:
         print(f"[ERROR] split_grid: {e}")
@@ -136,8 +135,7 @@ def detect_boards_contours(image, min_area=3000):
                 x2 = min(w, x + w_box + margin)
                 y2 = min(h, y + h_box + margin)
                 crop = image[y1:y2, x1:x2]
-                _, buffer = cv2.imencode('.jpg', crop)
-                cropped.append(buffer.tobytes())
+                cropped.append(crop)
             return cropped
         return None
     except Exception as e:
@@ -156,31 +154,36 @@ def detect_boards_in_image(image_bytes, use_grid=False):
             result = split_grid(img, rows=3, cols=2, margin=10)
             if result:
                 return result
-            return [image_bytes]
+            return [img]
 
         contour_result = detect_boards_contours(img)
         if contour_result:
             return contour_result
 
-        _, buffer = cv2.imencode('.jpg', img)
-        return [buffer.tobytes()]
+        return [img]
     except Exception as e:
         print(f"[ERROR] detect_boards_in_image: {e}")
         return [image_bytes]
 
-# ---------- PROCESAR CON CHESSVISION.AI ----------
-def process_image_bytes(image_bytes):
+# ---------- PROCESAR UN TABLERO (FEN + MINIATURA) ----------
+def process_board_image(board_img):
+    """Procesa una imagen de tablero (recortada) y devuelve FEN y miniatura base64."""
     try:
-        img = Image.open(io.BytesIO(image_bytes))
+        # --- Obtener FEN ---
+        # Convertir la imagen (OpenCV) a bytes para enviar a Chessvision.ai
+        _, board_bytes = cv2.imencode('.jpg', board_img)
+        board_bytes = board_bytes.tobytes()
+
+        # Redimensionar para Chessvision.ai
+        img = Image.open(io.BytesIO(board_bytes))
         if img.size[0] > 1000 or img.size[1] > 1000:
             img.thumbnail((1000, 1000))
             buffer = io.BytesIO()
             img.save(buffer, format='JPEG', quality=75)
-            image_bytes = buffer.getvalue()
-        elif img.size[0] < 40 or img.size[1] < 40:
-            return None
+            board_bytes = buffer.getvalue()
 
-        encoded_string = base64.b64encode(image_bytes).decode('utf-8')
+        # Llamar a Chessvision.ai
+        encoded_string = base64.b64encode(board_bytes).decode('utf-8')
         payload = {
             "board_orientation": "predict",
             "cropped": False,
@@ -188,30 +191,39 @@ def process_image_bytes(image_bytes):
             "image": f"data:image/jpeg;base64,{encoded_string}",
             "predict_turn": True
         }
-        response = requests.post(
-            'http://app.chessvision.ai/predict',
-            json=payload,
-            timeout=10
-        )
-        print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
+        response = requests.post('http://app.chessvision.ai/predict', json=payload, timeout=10)
+        fen = None
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
                 raw_fen = data.get('result')
-                clean_fen = clean_and_validate_fen(raw_fen)
-                if clean_fen:
-                    return clean_fen
-                else:
-                    return None
-            else:
-                return None
+                fen = clean_and_validate_fen(raw_fen)
+
+        # --- Generar miniatura (150x150) ---
+        # Redimensionar el tablero a 150x150 manteniendo relación de aspecto
+        h, w = board_img.shape[:2]
+        size = 150
+        if h > w:
+            new_w = size
+            new_h = int(h * size / w)
         else:
-            return None
-    except requests.exceptions.Timeout:
-        return None
+            new_h = size
+            new_w = int(w * size / h)
+        resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        # Poner en un canvas de 150x150 con fondo blanco
+        canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
+        x_offset = (size - new_w) // 2
+        y_offset = (size - new_h) // 2
+        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+
+        # Codificar a base64 JPEG
+        _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
+
+        return fen, thumbnail_b64
     except Exception as e:
-        print(f"[ERROR] process_image_bytes: {e}")
-        return None
+        print(f"[ERROR] process_board_image: {e}")
+        return None, None
 
 # ---------- ENDPOINT DE SUBIDA ----------
 @app.route('/upload', methods=['POST'])
@@ -234,11 +246,10 @@ def upload_files():
 
         if pdf_count > 3:
             return jsonify({'error': 'Máximo 3 archivos PDF'}), 400
-        # ⚠️ RESTAURADO A 10 IMÁGENES
         if image_count > 10:
-            return jsonify({'error': 'Máximo 10 imágenes por solicitud'}), 400
+            return jsonify({'error': 'Máximo 10 imágenes'}), 400
         if len(files) > 10:
-            return jsonify({'error': 'Máximo 10 archivos en total por solicitud'}), 400
+            return jsonify({'error': 'Máximo 10 archivos en total'}), 400
 
         pages_str = request.form.get('pages', '')
         selected_pages = []
@@ -250,7 +261,6 @@ def upload_files():
 
         results = []
         for file in files:
-            # Guardar nombre original para mostrar en el frontend
             original_filename = file.filename
             filename = secure_filename(original_filename)
             ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
@@ -285,15 +295,16 @@ def upload_files():
                             img.save(img_bytes, format='JPEG', quality=75)
                             img_bytes.seek(0)
                             board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
-                            for board_idx, board_bytes in enumerate(board_images):
-                                fen = process_image_bytes(board_bytes)
-                                if fen:
+                            for board_idx, board_img in enumerate(board_images):
+                                fen, thumbnail = process_board_image(board_img)
+                                if fen and thumbnail:
                                     results.append({
                                         'original_filename': original_filename,
                                         'file': filename,
                                         'page': page_num,
                                         'board': board_idx + 1,
                                         'fen': fen,
+                                        'thumbnail': thumbnail,
                                         'error': None
                                     })
                                 else:
@@ -303,6 +314,7 @@ def upload_files():
                                         'page': page_num,
                                         'board': board_idx + 1,
                                         'fen': None,
+                                        'thumbnail': None,
                                         'error': 'FEN inválido'
                                     })
                         except Exception as e:
@@ -314,14 +326,15 @@ def upload_files():
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
-                    for board_idx, board_bytes in enumerate(board_images):
-                        fen = process_image_bytes(board_bytes)
-                        if fen:
+                    for board_idx, board_img in enumerate(board_images):
+                        fen, thumbnail = process_board_image(board_img)
+                        if fen and thumbnail:
                             results.append({
                                 'original_filename': original_filename,
                                 'file': filename,
                                 'board': board_idx + 1,
                                 'fen': fen,
+                                'thumbnail': thumbnail,
                                 'error': None
                             })
                         else:
@@ -330,6 +343,7 @@ def upload_files():
                                 'file': filename,
                                 'board': board_idx + 1,
                                 'fen': None,
+                                'thumbnail': None,
                                 'error': 'FEN inválido'
                             })
                 except Exception as e:
@@ -346,7 +360,7 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- EXPORTAR PGN CON FORMATO LICHESS ----------
+# ---------- EXPORTAR PGN ----------
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
