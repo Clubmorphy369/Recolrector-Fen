@@ -36,6 +36,9 @@
         .export-section h4 { margin-top: 0; color: #1a237e; }
         .export-section p { margin: 0.5rem 0; font-size: 0.9rem; }
         .export-section .info-lichess { background: #fff3e0; padding: 0.8rem; border-radius: 4px; border-left: 4px solid #f57c00; }
+        .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
+        .export-section label { font-weight: 600; }
+        .export-section .field-group { margin: 0.8rem 0; }
     </style>
 </head>
 <body>
@@ -60,6 +63,16 @@
     <div id="export-section" class="export-section">
         <h4>📥 Exportar a Lichess</h4>
         <p>Descarga un archivo PGN con todos los FEN (hasta 64). Luego impórtalo en Lichess:</p>
+        
+        <div class="field-group">
+            <label for="study-name-input">Nombre del estudio:</label>
+            <input type="text" id="study-name-input" placeholder="Mi Estudio de Ajedrez" value="Mi Estudio de Ajedrez">
+        </div>
+        <div class="field-group">
+            <label for="user-name-input">Tu nombre de usuario en Lichess:</label>
+            <input type="text" id="user-name-input" placeholder="TuUsuario" value="Anónimo">
+        </div>
+        
         <div class="info-lichess">
             <strong>📖 Cómo importar en Lichess:</strong><br>
             1. Ve a <a href="https://lichess.org/study" target="_blank">https://lichess.org/study</a> y crea un nuevo estudio.<br>
@@ -233,11 +246,19 @@
                             alert('No hay FEN válidos para exportar.');
                             return;
                         }
+                        
+                        const studyName = document.getElementById('study-name-input').value.trim() || 'Mi Estudio de Ajedrez';
+                        const userName = document.getElementById('user-name-input').value.trim() || 'Anónimo';
+                        
                         try {
                             const response = await fetch('/export-pgn', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ fens: fens })
+                                body: JSON.stringify({ 
+                                    fens: fens,
+                                    study_name: studyName,
+                                    user: userName
+                                })
                             });
                             if (response.ok) {
                                 const blob = await response.blob();
