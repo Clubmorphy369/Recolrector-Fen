@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Solo instalar poppler-utils (necesario para pdf2image)
+# Solo instalar poppler-utils (necesario para procesar PDFs)
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
