@@ -294,7 +294,7 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- NUEVO ENDPOINT: EXPORTAR PGN ----------
+# ---------- EXPORTAR PGN (con formato correcto para Lichess) ----------
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
@@ -303,14 +303,18 @@ def export_pgn():
         if not fens:
             return jsonify({'error': 'No se proporcionaron FEN'}), 400
         
+        # Limitar a 64 capítulos (máximo permitido por Lichess)
         if len(fens) > 64:
             fens = fens[:64]
         
-        # Construir el PGN con todos los FEN
+        # Construir el PGN con formato válido para Lichess
         pgn_lines = []
         for fen in fens:
+            # Cada capítulo debe tener [SetUp "1"] y [FEN "..."]
+            pgn_lines.append('[SetUp "1"]')
             pgn_lines.append(f'[FEN "{fen}"]')
-            pgn_lines.append("")  # línea en blanco entre capítulos
+            pgn_lines.append("*")  # Marcador de final de juego
+            pgn_lines.append("")   # Línea en blanco entre capítulos
         pgn_text = "\n".join(pgn_lines)
         
         # Crear respuesta como archivo descargable
