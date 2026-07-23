@@ -10,11 +10,11 @@ from pdf2image import convert_from_bytes
 from PIL import Image
 import io
 import traceback
-import sys
+import shutil
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB (reducido para evitar timeouts)
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -29,7 +29,12 @@ def index():
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
-def split_grid(image, rows=3, cols=2, margin=15):
+# ---------- DIVISIÓN POR CUADRÍCULA (3 filas x 2 columnas) ----------
+def split_grid(image, rows=3, cols=2, margin=10):
+    """
+    Divide una imagen en una cuadrícula de rows x cols.
+    El margen se aplica a cada recorte para evitar bordes con texto.
+    """
     try:
         h, w = image.shape[:2]
         cell_h = h // rows
@@ -41,6 +46,7 @@ def split_grid(image, rows=3, cols=2, margin=15):
                 y1 = r * cell_h
                 x2 = (c + 1) * cell_w
                 y2 = (r + 1) * cell_h
+                # Aplicar margen (recortar bordes)
                 x1c = max(0, x1 + margin)
                 y1c = max(0, y1 + margin)
                 x2c = min(w, x2 - margin)
@@ -54,6 +60,7 @@ def split_grid(image, rows=3, cols=2, margin=15):
         print(f"[ERROR] split_grid: {e}")
         return []
 
+# ---------- DETECCIÓN POR CONTORNOS (para imágenes sueltas) ----------
 def detect_boards_contours(image, min_area=3000):
     try:
         h, w = image.shape[:2]
@@ -65,7 +72,7 @@ def detect_boards_contours(image, min_area=3000):
         kernel = np.ones((5, 5), np.uint8)
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-        
+
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         board_rects = []
         for cnt in contours:
@@ -79,7 +86,7 @@ def detect_boards_contours(image, min_area=3000):
                 aspect = w_box / h_box
                 if 0.5 < aspect < 1.5:
                     board_rects.append((x, y, w_box, h_box, area))
-        
+
         board_rects.sort(key=lambda r: r[4], reverse=True)
         filtered = []
         for rect in board_rects:
@@ -94,7 +101,7 @@ def detect_boards_contours(image, min_area=3000):
                         break
             if not overlap:
                 filtered.append(rect)
-        
+
         if len(filtered) >= 4:
             cropped = []
             for (x, y, w_box, h_box, _) in filtered:
@@ -112,30 +119,41 @@ def detect_boards_contours(image, min_area=3000):
         print(f"[ERROR] detect_boards_contours: {e}")
         return None
 
-def detect_boards_in_image(image_bytes):
+# ---------- DETECCIÓN HÍBRIDA (contornos + grid) ----------
+def detect_boards_in_image(image_bytes, use_grid=False):
+    """
+    Si use_grid=True, fuerza la división en cuadrícula 3x2.
+    Si use_grid=False, intenta contornos; si falla, usa grid.
+    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
             return [image_bytes]
-        
-        # Intentar detección por contornos
-        contour_results = detect_boards_contours(img)
-        if contour_results is not None:
-            return contour_results
-        
-        # Fallback: cuadrícula fija (3x2)
-        grid_results = split_grid(img, rows=3, cols=2, margin=20)
-        if grid_results:
-            return grid_results
-        
+
+        if use_grid:
+            grid_result = split_grid(img, rows=3, cols=2, margin=10)
+            if grid_result:
+                return grid_result
+            return [image_bytes]
+
+        # Primero intentar contornos
+        contour_result = detect_boards_contours(img)
+        if contour_result is not None:
+            return contour_result
+
+        # Fallback a grid
+        grid_result = split_grid(img, rows=3, cols=2, margin=10)
+        if grid_result:
+            return grid_result
+
         return [image_bytes]
     except Exception as e:
         print(f"[ERROR] detect_boards_in_image: {e}")
         return [image_bytes]
 
+# ---------- PROCESAR IMAGEN CON CHESSVISION.AI ----------
 def process_image_bytes(image_bytes, max_retries=1):
-    """Envía a Chessvision.ai con reintentos."""
     for attempt in range(max_retries + 1):
         try:
             img = Image.open(io.BytesIO(image_bytes))
@@ -158,10 +176,9 @@ def process_image_bytes(image_bytes, max_retries=1):
             response = requests.post(
                 'http://app.chessvision.ai/predict',
                 json=payload,
-                timeout=15  # timeout reducido a 15 segundos
+                timeout=15
             )
             print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
-            
             if response.status_code == 200:
                 data = response.json()
                 if data.get('success'):
@@ -180,6 +197,7 @@ def process_image_bytes(image_bytes, max_retries=1):
             return f"Error: {str(e)[:50]}"
     return "Error: falló después de reintentos"
 
+# ---------- ENDPOINT DE SUBIDA ----------
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
@@ -200,14 +218,16 @@ def upload_files():
 
             if ext == 'pdf':
                 try:
-                    images = convert_from_bytes(file_bytes, dpi=200)  # Reducir DPI para ahorrar memoria
-                    if len(images) > 10:
-                        images = images[:10]
+                    # 🔥 Aumentar DPI para mejor calidad
+                    images = convert_from_bytes(file_bytes, dpi=300)
+                    if len(images) > 20:
+                        images = images[:20]
                     for page_num, img in enumerate(images):
                         img_bytes = io.BytesIO()
-                        img.save(img_bytes, format='JPEG', quality=80)
+                        img.save(img_bytes, format='JPEG', quality=95)
                         img_bytes.seek(0)
-                        board_images = detect_boards_in_image(img_bytes.getvalue())
+                        # 🔥 Forzar cuadrícula 3x2 con margen 10
+                        board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
                         for board_idx, board_bytes in enumerate(board_images):
                             fen = process_image_bytes(board_bytes)
                             results.append({
@@ -222,7 +242,7 @@ def upload_files():
                     results.append({'file': filename, 'error': f'Error PDF: {str(e)[:100]}'})
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
-                    board_images = detect_boards_in_image(file_bytes)
+                    board_images = detect_boards_in_image(file_bytes, use_grid=False)
                     for board_idx, board_bytes in enumerate(board_images):
                         fen = process_image_bytes(board_bytes)
                         results.append({
@@ -236,6 +256,10 @@ def upload_files():
                     results.append({'file': filename, 'error': f'Error: {str(e)[:100]}'})
             else:
                 results.append({'file': filename, 'error': 'Formato no soportado'})
+
+        # Limpiar archivos temporales
+        shutil.rmtree(app.config['UPLOAD_FOLDER'], ignore_errors=True)
+        app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
 
         return jsonify({'results': results, 'success': True})
     except Exception as e:
