@@ -6,19 +6,18 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-# Configuración
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Ruta absoluta de la carpeta frontend
-FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
+# Ruta ABSOLUTA a la carpeta frontend
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 
 @app.route('/')
 def index():
     return send_from_directory(FRONTEND_DIR, 'index.html')
 
-# Servir archivos estáticos (CSS, JS) desde frontend
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
