@@ -4,26 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="container">
         <h1>♟️ Chess PDF to FEN</h1>
-        <p>Sube un libro de ajedrez en PDF y obtén otro PDF con los FEN de cada diagrama.</p>
-
+        <p>Sube una imagen de un tablero de ajedrez y obtén el FEN.</p>
         <form id="uploadForm" enctype="multipart/form-data">
-            <div class="file-input-wrapper">
-                <label for="pdfFile" class="file-label">📂 Seleccionar PDF</label>
-                <input type="file" id="pdfFile" name="pdf" accept=".pdf" required>
-            </div>
-            <button type="submit" id="submitBtn">🚀 Procesar PDF</button>
+            <input type="file" id="fileInput" name="file" accept="image/*" required>
+            <button type="submit">Procesar</button>
         </form>
-
-        <div id="status" class="status-message"></div>
-        <div id="progress" class="progress-bar" style="display:none;">
-            <div class="progress-fill" id="progressFill" style="width:0%"></div>
-        </div>
+        <div id="result"></div>
     </div>
-    <script src="script.js"></script>
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const fileInput = document.getElementById('fileInput');
+            formData.append('file', fileInput.files[0]);
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = 'Procesando...';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    resultDiv.textContent = `FEN: ${data.fen}`;
+                } else {
+                    resultDiv.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
 </body>
 </html>
