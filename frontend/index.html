@@ -264,11 +264,8 @@
                                 const blob = await response.blob();
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
-                                // El nombre del archivo lo genera el backend, pero podemos sobrescribirlo
-                                // o confiar en el backend. Dejamos que el backend lo ponga.
                                 a.href = url;
-                                // El backend ya envía el nombre en el header Content-Disposition
-                                a.download = ''; // Se usará el nombre del backend
+                                a.download = '';
                                 document.body.appendChild(a);
                                 a.click();
                                 a.remove();
