@@ -57,7 +57,7 @@
             </div>
             <button type="submit">Procesar archivos</button>
         </form>
-        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>🖼️ Imágenes: máximo 5 archivos.</div>
+        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>🖼️ Imágenes: máximo 10 archivos.</div>
         <div id="preview"></div>
     </div>
     <div id="status" class="status"></div>
@@ -88,7 +88,7 @@
     </div>
 
     <script>
-        // ---------- ALMACENAR PREVISUALIZACIONES DE ARCHIVOS ----------
+        // ---------- ALMACENAR PREVISUALIZACIONES DE ARCHIVOS (por nombre original) ----------
         let filePreviews = {};
 
         // ---------- VISTA PREVIA DE IMÁGENES (arriba) ----------
@@ -100,11 +100,10 @@
             if (!files.length) return;
             for (const file of files) {
                 const url = URL.createObjectURL(file);
-                const ext = file.name.split('.').pop().toLowerCase();
-                // Guardar para usar luego en la tabla
+                // Guardar por nombre original (exactamente como aparece en el input)
                 filePreviews[file.name] = url;
+                const ext = file.name.split('.').pop().toLowerCase();
                 if (ext === 'pdf') {
-                    // Mostrar icono de PDF en preview
                     const div = document.createElement('div');
                     div.style.cssText = 'width:120px;height:120px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-radius:6px;border:1px solid #ddd;font-size:2rem;color:#e74c3c;';
                     div.textContent = '📄';
@@ -190,13 +189,14 @@
                             const board = item.board || '-';
                             const fen = item.fen || 'Error';
                             const isError = !item.fen;
-                            // Buscar la imagen original (por nombre de archivo)
-                            const previewUrl = filePreviews[item.file] || null;
-                            const ext = item.file.split('.').pop().toLowerCase();
+                            // Usar el nombre original para buscar la imagen
+                            const originalName = item.original_filename || item.file;
+                            const previewUrl = filePreviews[originalName] || null;
+                            const ext = originalName.split('.').pop().toLowerCase();
                             const isPdf = ext === 'pdf';
 
                             html += `<tr data-fen="${fen}">
-                                <td>${item.file}</td>
+                                <td>${originalName}</td>
                                 <td>${page}</td>
                                 <td>${board}</td>
                                 <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
