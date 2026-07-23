@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Instalar dependencias del sistema para OpenCV y pdf2image
+# Dependencias del sistema para OpenCV y pdf2image
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     libgl1-mesa-glx \
