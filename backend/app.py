@@ -56,7 +56,7 @@ def split_grid(image, rows=3, cols=2, margin=10):
         print(f"[ERROR] split_grid: {e}")
         return []
 
-# ---------- DETECCIÓN HÍBRIDA ----------
+# ---------- DETECCIÓN DE TABLEROS ----------
 def detect_boards_in_image(image_bytes, use_grid=True):
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -126,15 +126,30 @@ def upload_files():
         files = request.files.getlist('files')
         if not files:
             return jsonify({'error': 'No se seleccionaron archivos'}), 400
-        if len(files) > 3:
-            return jsonify({'error': 'Máximo 3 archivos por solicitud'}), 400
 
-        # Obtener lista de páginas (desde el frontend)
+        # Contar PDFs e imágenes
+        pdf_count = 0
+        image_count = 0
+        for f in files:
+            ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+            if ext == 'pdf':
+                pdf_count += 1
+            elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
+                image_count += 1
+
+        # Límites: 3 PDFs, 10 imágenes, total 10
+        if pdf_count > 3:
+            return jsonify({'error': 'Máximo 3 archivos PDF por solicitud'}), 400
+        if image_count > 10:
+            return jsonify({'error': 'Máximo 10 imágenes por solicitud'}), 400
+        if len(files) > 10:
+            return jsonify({'error': 'Máximo 10 archivos en total por solicitud'}), 400
+
+        # Obtener páginas seleccionadas (para PDFs)
         pages_str = request.form.get('pages', '')
         selected_pages = []
         if pages_str:
             try:
-                # Ejemplo: "1,3,5" -> [1,3,5]
                 selected_pages = [int(p.strip()) for p in pages_str.split(',') if p.strip().isdigit()]
             except:
                 selected_pages = []
@@ -153,23 +168,20 @@ def upload_files():
                     total_pages = len(reader.pages)
                     print(f"[INFO] PDF tiene {total_pages} páginas.")
 
-                    # Si el usuario no especificó páginas, usar la primera página
+                    # Si no se especificaron páginas, usar la página 1
                     if not selected_pages:
                         selected_pages = [1]
 
-                    # Filtrar páginas que existen
+                    # Filtrar páginas válidas
                     valid_pages = [p for p in selected_pages if 1 <= p <= total_pages]
-
                     if not valid_pages:
                         return jsonify({'error': 'No hay páginas válidas para procesar'}), 400
 
-                    # Limitar a 3 páginas (por seguridad)
+                    # Limitar a 3 páginas
                     if len(valid_pages) > 3:
                         valid_pages = valid_pages[:3]
 
-                    # Procesar cada página seleccionada
                     for page_num in valid_pages:
-                        # Convertir solo esa página (bajo DPI para ahorrar memoria)
                         img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
                         img_bytes = io.BytesIO()
                         img.save(img_bytes, format='JPEG', quality=75)
@@ -204,7 +216,7 @@ def upload_files():
             else:
                 results.append({'file': filename, 'error': 'Formato no soportado'})
 
-        # Limpiar temporales
+        # Limpiar archivos temporales
         shutil.rmtree(app.config['UPLOAD_FOLDER'], ignore_errors=True)
         app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
 
