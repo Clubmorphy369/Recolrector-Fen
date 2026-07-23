@@ -21,4 +21,5 @@ COPY frontend/ ./frontend/
 
 EXPOSE 8080
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "backend.app:app"]
+# ⚠️ TIMEOUT AUMENTADO A 120 SEGUNDOS
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "120", "backend.app:app"]
