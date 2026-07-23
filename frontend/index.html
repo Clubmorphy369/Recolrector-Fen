@@ -4,11 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
-    <!-- Librerías para tableros de ajedrez (CDN confiable) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1200px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fa; }
@@ -45,8 +40,9 @@
         .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
         .export-section label { font-weight: 600; }
         .export-section .field-group { margin: 0.8rem 0; }
-        .board-miniature { width: 120px; height: 120px; margin: 0 auto; }
-        .board-cell { min-width: 130px; }
+        .board-miniature { width: 120px; height: 120px; display: block; }
+        .board-cell { min-width: 130px; text-align: center; }
+        .board-svg { width: 120px; height: 120px; }
     </style>
 </head>
 <body>
@@ -112,13 +108,7 @@
             }
         });
 
-        // ---------- FUNCIÓN PARA OBTENER ORIENTACIÓN DEL FEN ----------
-        function getOrientation(fen) {
-            const parts = fen.split(' ');
-            return parts.length >= 2 && parts[1] === 'b' ? 'black' : 'white';
-        }
-
-        // ---------- FUNCIÓN PARA ALTERNAR TURNO EN UN FEN ----------
+        // ---------- FUNCIÓN PARA ALTERNAR TURNO ----------
         function toggleTurn(fen) {
             const parts = fen.split(' ');
             if (parts.length >= 3) {
@@ -126,6 +116,104 @@
                 return parts.join(' ');
             }
             return fen;
+        }
+
+        // ---------- FUNCIÓN PARA DIBUJAR TABLERO CON SVG PURO ----------
+        function renderBoard(fen, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const size = 120;
+            const sqSize = size / 8;
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', size);
+            svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            svg.setAttribute('class', 'board-svg');
+            container.innerHTML = '';
+            container.appendChild(svg);
+
+            // Colores de casillas
+            const light = '#f0d9b5';
+            const dark = '#b58863';
+
+            // Piezas SVG (Unicode simplificado)
+            const pieces = {
+                'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+                'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+            };
+
+            // Colores para piezas
+            const pieceColor = {
+                'K': '#000', 'Q': '#000', 'R': '#000', 'B': '#000', 'N': '#000', 'P': '#000',
+                'k': '#000', 'q': '#000', 'r': '#000', 'b': '#000', 'n': '#000', 'p': '#000'
+            };
+
+            // Procesar FEN
+            const fenParts = fen.split(' ');
+            const position = fenParts[0];
+            const turn = fenParts.length > 1 ? fenParts[1] : 'w';
+            const orientation = turn === 'b' ? 'black' : 'white';
+
+            // Crear filas de la posición
+            const rows = position.split('/');
+            // Invertir si orientación negras
+            const displayRows = orientation === 'black' ? [...rows].reverse() : rows;
+
+            for (let r = 0; r < 8; r++) {
+                const row = displayRows[r];
+                let col = 0;
+                const piecesInRow = [];
+                for (let i = 0; i < row.length; i++) {
+                    const ch = row[i];
+                    if (ch >= '1' && ch <= '8') {
+                        const empty = parseInt(ch);
+                        for (let e = 0; e < empty; e++) {
+                            piecesInRow.push(null);
+                        }
+                    } else {
+                        piecesInRow.push(ch);
+                    }
+                }
+                // Invertir columnas si orientación negras
+                const displayCols = orientation === 'black' ? [...piecesInRow].reverse() : piecesInRow;
+
+                for (let c = 0; c < 8; c++) {
+                    const x = c * sqSize;
+                    const y = r * sqSize;
+                    const isLight = (r + c) % 2 === 0;
+
+                    // Casilla
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', y);
+                    rect.setAttribute('width', sqSize);
+                    rect.setAttribute('height', sqSize);
+                    rect.setAttribute('fill', isLight ? light : dark);
+                    rect.setAttribute('stroke', '#333');
+                    rect.setAttribute('stroke-width', '0.5');
+                    svg.appendChild(rect);
+
+                    // Pieza
+                    const piece = displayCols[c];
+                    if (piece) {
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        text.setAttribute('x', x + sqSize / 2);
+                        text.setAttribute('y', y + sqSize / 2 + 12);
+                        text.setAttribute('font-size', sqSize * 0.75);
+                        text.setAttribute('text-anchor', 'middle');
+                        text.setAttribute('dominant-baseline', 'middle');
+                        text.setAttribute('font-family', 'Arial, sans-serif');
+                        text.textContent = pieces[piece] || piece;
+                        // Color de la pieza (blanca o negra según mayúscula/minúscula)
+                        const isWhite = piece === piece.toUpperCase();
+                        text.setAttribute('fill', isWhite ? '#fff' : '#222');
+                        text.setAttribute('stroke', isWhite ? '#222' : '#fff');
+                        text.setAttribute('stroke-width', '1.5');
+                        svg.appendChild(text);
+                    }
+                }
+            }
         }
 
         // ---------- SUBIDA Y PROCESAMIENTO ----------
@@ -216,57 +304,32 @@
                     }
                     resultDiv.innerHTML = html;
 
-                    // ---------- INICIALIZAR TABLEROS (solo si la librería está disponible) ----------
-                    if (typeof Chessboard !== 'undefined') {
-                        const boards = {};
-                        document.querySelectorAll('[data-board-id]').forEach(row => {
-                            const boardId = row.getAttribute('data-board-id');
-                            const fen = row.getAttribute('data-fen');
-                            if (fen && fen !== 'Error') {
-                                try {
-                                    const orientation = getOrientation(fen);
-                                    const board = Chessboard(boardId, {
-                                        position: fen,
-                                        orientation: orientation,
-                                        showNotation: false,
-                                        draggable: false
-                                    });
-                                    boards[boardId] = board;
-                                } catch (err) {
-                                    console.error('Error al crear tablero:', err);
-                                }
-                            }
-                        });
+                    // ---------- DIBUJAR TABLEROS ----------
+                    document.querySelectorAll('[data-board-id]').forEach(row => {
+                        const boardId = row.getAttribute('data-board-id');
+                        const fen = row.getAttribute('data-fen');
+                        if (fen && fen !== 'Error') {
+                            renderBoard(fen, boardId);
+                        }
+                    });
 
-                        // ---------- FUNCIONALIDAD ALTERNAR TURNO ----------
-                        document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
-                            btn.addEventListener('click', function() {
-                                const fen = this.getAttribute('data-fen');
-                                const boardId = this.getAttribute('data-board-id');
-                                if (!fen || !boardId) return;
-                                const newFen = toggleTurn(fen);
-                                const row = this.closest('tr');
-                                const fenCell = row.querySelector('.fen-cell');
-                                fenCell.textContent = newFen;
-                                row.setAttribute('data-fen', newFen);
-                                this.setAttribute('data-fen', newFen);
-                                const copyBtn = row.querySelector('.btn-copy');
-                                if (copyBtn) copyBtn.setAttribute('data-fen', newFen);
-                                if (boards[boardId]) {
-                                    const newOrientation = getOrientation(newFen);
-                                    boards[boardId].position(newFen);
-                                    boards[boardId].orientation(newOrientation);
-                                }
-                            });
+                    // ---------- FUNCIONALIDAD ALTERNAR TURNO ----------
+                    document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const fen = this.getAttribute('data-fen');
+                            const boardId = this.getAttribute('data-board-id');
+                            if (!fen || !boardId) return;
+                            const newFen = toggleTurn(fen);
+                            const row = this.closest('tr');
+                            const fenCell = row.querySelector('.fen-cell');
+                            fenCell.textContent = newFen;
+                            row.setAttribute('data-fen', newFen);
+                            this.setAttribute('data-fen', newFen);
+                            const copyBtn = row.querySelector('.btn-copy');
+                            if (copyBtn) copyBtn.setAttribute('data-fen', newFen);
+                            renderBoard(newFen, boardId);
                         });
-                    } else {
-                        // Fallback: mostrar mensaje si no cargó la librería
-                        document.querySelectorAll('.board-cell').forEach(cell => {
-                            if (cell.textContent.trim() === '-' || cell.querySelector('.board-miniature')) {
-                                cell.innerHTML = '<span style="color:#999;">Librería no cargada</span>';
-                            }
-                        });
-                    }
+                    });
 
                     // ---------- FUNCIONALIDAD COPIAR Y ELIMINAR ----------
                     document.querySelectorAll('.btn-copy').forEach(btn => {
