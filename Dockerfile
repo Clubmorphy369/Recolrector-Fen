@@ -2,10 +2,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Solo instalar poppler-utils (necesario para procesar PDFs)
-RUN apt-get update && apt-get install -y \
-    poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
+
+# Forzar invalidación de caché
+RUN echo "Invalidating cache 2026-07-23"
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
