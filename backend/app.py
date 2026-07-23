@@ -12,6 +12,7 @@ import io
 import traceback
 import shutil
 from datetime import datetime, timezone
+import re
 
 # Intentar importar PyPDF2 para contar páginas
 try:
@@ -295,7 +296,7 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- EXPORTAR PGN CON FORMATO LICHESS ----------
+# ---------- EXPORTAR PGN CON FORMATO LICHESS (CORREGIDO) ----------
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
@@ -332,14 +333,20 @@ def export_pgn():
             pgn_lines.append('[SetUp "1"]')
             pgn_lines.append(f'[UTCDate "{date_str}"]')
             pgn_lines.append(f'[UTCTime "{time_str}"]')
-            pgn_lines.append("")
-            pgn_lines.append(" *")
-            pgn_lines.append("")
+            pgn_lines.append('[ChapterMode "gamebook"]')
+            pgn_lines.append("")  # Línea en blanco
+            pgn_lines.append(" *")  # Espacio + asterisco
+            pgn_lines.append("")  # Línea en blanco entre capítulos
         
         pgn_text = "\n".join(pgn_lines)
         
+        # Generar nombre de archivo estilo Lichess
+        safe_study_name = re.sub(r'[^a-zA-Z0-9-]', '-', study_name).lower()
+        safe_user = re.sub(r'[^a-zA-Z0-9-]', '-', user).lower()
+        filename = f"lichess_study_{safe_study_name}_by_{safe_user}_{date_str.replace('.', '-')}.pgn"
+        
         response = Response(pgn_text, mimetype='text/plain')
-        response.headers.set("Content-Disposition", "attachment", filename="fen_study.pgn")
+        response.headers.set("Content-Disposition", "attachment", filename=filename)
         return response
     except Exception as e:
         print(f"[ERROR] export_pgn: {traceback.format_exc()}")
