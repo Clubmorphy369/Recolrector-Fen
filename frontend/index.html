@@ -1,21 +1,16 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
-    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>♟️ Chess PDF to FEN</h1>
-        <p>Sube una imagen de un tablero de ajedrez y obtén el FEN.</p>
-        <form id="uploadForm" enctype="multipart/form-data">
-            <input type="file" id="fileInput" name="file" accept="image/*" required>
-            <button type="submit">Procesar</button>
-        </form>
-        <div id="result"></div>
-    </div>
+    <h1>♟️ Chess PDF to FEN</h1>
+    <p>Sube una imagen de un tablero de ajedrez y obtén el FEN.</p>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="fileInput" name="file" accept="image/*" required>
+        <button type="submit">Procesar</button>
+    </form>
+    <div id="result"></div>
     <script>
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
