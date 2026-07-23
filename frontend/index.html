@@ -57,7 +57,7 @@
             </div>
             <button type="submit">Procesar archivos</button>
         </form>
-        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>🖼️ Imágenes: máximo 10 archivos.</div>
+        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>🖼️ Imágenes: máximo 5 archivos.</div>
         <div id="preview"></div>
     </div>
     <div id="status" class="status"></div>
@@ -133,31 +133,20 @@
             container.innerHTML = '';
             container.appendChild(svg);
 
-            // Colores de casillas
             const light = '#f0d9b5';
             const dark = '#b58863';
 
-            // Piezas SVG (Unicode simplificado)
             const pieces = {
                 'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
                 'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
             };
 
-            // Colores para piezas
-            const pieceColor = {
-                'K': '#000', 'Q': '#000', 'R': '#000', 'B': '#000', 'N': '#000', 'P': '#000',
-                'k': '#000', 'q': '#000', 'r': '#000', 'b': '#000', 'n': '#000', 'p': '#000'
-            };
-
-            // Procesar FEN
             const fenParts = fen.split(' ');
             const position = fenParts[0];
             const turn = fenParts.length > 1 ? fenParts[1] : 'w';
             const orientation = turn === 'b' ? 'black' : 'white';
 
-            // Crear filas de la posición
             const rows = position.split('/');
-            // Invertir si orientación negras
             const displayRows = orientation === 'black' ? [...rows].reverse() : rows;
 
             for (let r = 0; r < 8; r++) {
@@ -175,7 +164,6 @@
                         piecesInRow.push(ch);
                     }
                 }
-                // Invertir columnas si orientación negras
                 const displayCols = orientation === 'black' ? [...piecesInRow].reverse() : piecesInRow;
 
                 for (let c = 0; c < 8; c++) {
@@ -183,7 +171,6 @@
                     const y = r * sqSize;
                     const isLight = (r + c) % 2 === 0;
 
-                    // Casilla
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', x);
                     rect.setAttribute('y', y);
@@ -194,7 +181,6 @@
                     rect.setAttribute('stroke-width', '0.5');
                     svg.appendChild(rect);
 
-                    // Pieza
                     const piece = displayCols[c];
                     if (piece) {
                         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -205,7 +191,6 @@
                         text.setAttribute('dominant-baseline', 'middle');
                         text.setAttribute('font-family', 'Arial, sans-serif');
                         text.textContent = pieces[piece] || piece;
-                        // Color de la pieza (blanca o negra según mayúscula/minúscula)
                         const isWhite = piece === piece.toUpperCase();
                         text.setAttribute('fill', isWhite ? '#fff' : '#222');
                         text.setAttribute('stroke', isWhite ? '#222' : '#fff');
@@ -246,7 +231,6 @@
                 statusDiv.textContent = 'Procesamiento completado.';
 
                 if (data.success && data.results) {
-                    // ---------- FILTRAR DUPLICADOS ----------
                     const uniqueResults = [];
                     const seenFens = new Set();
                     for (const item of data.results) {
@@ -256,7 +240,6 @@
                         uniqueResults.push(item);
                     }
 
-                    // ---------- CONSTRUIR TABLA ----------
                     let html = '<h3>Resultados</h3>';
                     if (uniqueResults.length === 0) {
                         html += '<p>No se obtuvieron FEN válidos.</p>';
@@ -304,7 +287,6 @@
                     }
                     resultDiv.innerHTML = html;
 
-                    // ---------- DIBUJAR TABLEROS ----------
                     document.querySelectorAll('[data-board-id]').forEach(row => {
                         const boardId = row.getAttribute('data-board-id');
                         const fen = row.getAttribute('data-fen');
@@ -313,7 +295,6 @@
                         }
                     });
 
-                    // ---------- FUNCIONALIDAD ALTERNAR TURNO ----------
                     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
                         btn.addEventListener('click', function() {
                             const fen = this.getAttribute('data-fen');
@@ -331,7 +312,6 @@
                         });
                     });
 
-                    // ---------- FUNCIONALIDAD COPIAR Y ELIMINAR ----------
                     document.querySelectorAll('.btn-copy').forEach(btn => {
                         btn.addEventListener('click', function() {
                             const fen = this.getAttribute('data-fen');
@@ -353,7 +333,6 @@
                         });
                     });
 
-                    // ---------- ACTUALIZAR ESTADÍSTICAS ----------
                     function updateStats() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const total = rows.length;
@@ -363,7 +342,6 @@
                         }
                     }
 
-                    // ---------- MOSTRAR SECCIÓN DE EXPORTACIÓN ----------
                     const exportSection = document.getElementById('export-section');
                     if (uniqueResults.length > 0) {
                         exportSection.style.display = 'block';
@@ -371,7 +349,6 @@
                         exportSection.style.display = 'none';
                     }
 
-                    // ---------- FUNCIÓN PARA ACTUALIZAR VISIBILIDAD ----------
                     function updateExportVisibility() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const exportSection = document.getElementById('export-section');
@@ -382,7 +359,6 @@
                         }
                     }
 
-                    // ---------- DESCARGAR PGN ----------
                     document.getElementById('download-pgn-btn').addEventListener('click', async function() {
                         const fenRows = document.querySelectorAll('#result table tbody tr');
                         const fens = [];
