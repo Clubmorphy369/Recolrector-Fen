@@ -7,3 +7,4 @@ Pillow==10.1.0
 opencv-python-headless==4.9.0.80
 numpy==1.26.4
 PyPDF2==3.0.1
+python-chess==1.10.0
