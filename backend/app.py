@@ -25,7 +25,7 @@ except ImportError:
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -34,26 +34,14 @@ FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 
 # ---------- FUNCIÓN PARA LIMPIAR Y VALIDAR FEN ----------
 def clean_and_validate_fen(raw_fen):
-    """
-    Limpia el FEN devuelto por Chessvision.ai:
-    - Reemplaza '_' por ' '.
-    - Trunca a 6 campos (el formato estándar).
-    - Valida con python-chess.
-    Retorna el FEN limpio si es válido, o None si no lo es.
-    """
     if not raw_fen:
         return None
-    # Reemplazar guiones bajos por espacios
     fen = raw_fen.replace('_', ' ')
-    # Dividir en campos y quedarse con los 6 primeros
     parts = fen.split()
     if len(parts) > 6:
         fen = ' '.join(parts[:6])
     elif len(parts) < 6:
-        # Si tiene menos de 6 campos, intentar rellenar con campos por defecto
-        # Pero en la práctica, Chessvision.ai devuelve siempre 6 o más
         return None
-    # Validar con python-chess
     try:
         board = chess.Board(fen)
         if board.is_valid():
@@ -190,7 +178,7 @@ def process_image_bytes(image_bytes):
             img.save(buffer, format='JPEG', quality=75)
             image_bytes = buffer.getvalue()
         elif img.size[0] < 40 or img.size[1] < 40:
-            return None  # Imagen demasiado pequeña
+            return None
 
         encoded_string = base64.b64encode(image_bytes).decode('utf-8')
         payload = {
@@ -203,19 +191,18 @@ def process_image_bytes(image_bytes):
         response = requests.post(
             'http://app.chessvision.ai/predict',
             json=payload,
-            timeout=12
+            timeout=10
         )
         print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
                 raw_fen = data.get('result')
-                # Limpiar y validar el FEN
                 clean_fen = clean_and_validate_fen(raw_fen)
                 if clean_fen:
                     return clean_fen
                 else:
-                    return None  # FEN inválido
+                    return None
             else:
                 return None
         else:
@@ -247,10 +234,11 @@ def upload_files():
 
         if pdf_count > 3:
             return jsonify({'error': 'Máximo 3 archivos PDF'}), 400
-        if image_count > 10:
-            return jsonify({'error': 'Máximo 10 imágenes'}), 400
-        if len(files) > 10:
-            return jsonify({'error': 'Máximo 10 archivos en total'}), 400
+        # ⚠️ REDUCIDO DE 10 A 5 PARA EVITAR TIMEOUT
+        if image_count > 5:
+            return jsonify({'error': 'Máximo 5 imágenes por solicitud'}), 400
+        if len(files) > 5:
+            return jsonify({'error': 'Máximo 5 archivos en total por solicitud'}), 400
 
         pages_str = request.form.get('pages', '')
         selected_pages = []
