@@ -5,24 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fa; }
         h1 { color: #2c3e50; }
-        .upload-area { border: 2px dashed #3498db; padding: 2rem; text-align: center; border-radius: 8px; }
+        .upload-area { border: 2px dashed #3498db; padding: 2rem; text-align: center; border-radius: 8px; background: white; }
         input[type="file"] { margin: 1rem 0; }
         .pages-input { margin: 1rem 0; }
         .pages-input label { font-weight: bold; }
-        .pages-input input { padding: 0.5rem; width: 200px; }
-        button { background: #3498db; color: white; border: none; padding: 0.5rem 2rem; border-radius: 4px; cursor: pointer; }
+        .pages-input input { padding: 0.5rem; width: 200px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #3498db; color: white; border: none; padding: 0.5rem 2rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #2980b9; }
+        .info { font-size: 0.9rem; color: #555; margin-top: 0.5rem; }
+        #status { margin-top: 1rem; font-weight: bold; }
+        #preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1rem; justify-content: center; }
+        #preview img { max-width: 120px; max-height: 120px; border-radius: 6px; border: 1px solid #ddd; object-fit: cover; }
         #result { margin-top: 2rem; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
-        th { background: #f2f2f2; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 0.6rem 0.8rem; text-align: left; }
+        th { background: #f2f2f2; position: sticky; top: 0; }
         .error { color: #e74c3c; }
         .success { color: #27ae60; }
-        .status { margin-top: 1rem; font-weight: bold; }
-        .fen-cell { font-family: monospace; font-size: 0.8rem; word-break: break-all; }
-        .info { font-size: 0.9rem; color: #555; margin-top: 0.5rem; }
+        .fen-cell { font-family: 'Courier New', monospace; font-size: 0.8rem; word-break: break-all; }
+        .btn-copy { background: #2ecc71; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .btn-copy:hover { background: #27ae60; }
+        .btn-copy.used { background: #95a5a6; cursor: not-allowed; }
+        .badge-duplicate { background: #f39c12; color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.7rem; margin-left: 0.5rem; }
+        .duplicate-row { background: #fff8e1; }
+        .stats { margin-top: 1rem; font-size: 0.95rem; color: #333; }
     </style>
 </head>
 <body>
@@ -37,13 +46,34 @@
             </div>
             <button type="submit">Procesar archivos</button>
         </form>
-        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>
-        🖼️ Imágenes: máximo 10 archivos.</div>
+        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>🖼️ Imágenes: máximo 10 archivos.</div>
+        <div id="preview"></div>
     </div>
     <div id="status" class="status"></div>
     <div id="result"></div>
 
     <script>
+        // ---------- VISTA PREVIA DE IMÁGENES ----------
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const previewDiv = document.getElementById('preview');
+            previewDiv.innerHTML = '';
+            const files = e.target.files;
+            if (!files.length) return;
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) continue;
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const img = document.createElement('img');
+                    img.src = ev.target.result;
+                    img.alt = file.name;
+                    img.title = file.name;
+                    previewDiv.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // ---------- SUBIDA Y PROCESAMIENTO ----------
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData();
@@ -73,26 +103,89 @@
                 statusDiv.textContent = 'Procesamiento completado.';
 
                 if (data.success && data.results) {
-                    let html = '<h3>Resultados</h3><table><thead><tr>' +
-                        '<th>Archivo</th><th>Página</th><th>Tablero</th><th>FEN / Error</th>' +
-                        '</tr></thead><tbody>';
-                    let successCount = 0;
+                    // ---------- FILTRAR DUPLICADOS ----------
+                    const uniqueResults = [];
+                    const seenFens = new Set();
                     for (const item of data.results) {
-                        const fen = item.fen || item.error || 'Error';
-                        const isError = !item.fen;
-                        const page = item.page || '-';
-                        const board = item.board || '-';
-                        html += `<tr>
-                            <td>${item.file}</td>
-                            <td>${page}</td>
-                            <td>${board}</td>
-                            <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
-                        </tr>`;
-                        if (item.fen) successCount++;
+                        const fen = item.fen || null;
+                        // Si es error o ya vimos este FEN, lo omitimos
+                        if (!fen || seenFens.has(fen)) continue;
+                        seenFens.add(fen);
+                        uniqueResults.push(item);
                     }
-                    html += '</tbody></table>';
-                    html += `<p>Procesados: ${data.results.length}, FEN obtenidos: ${successCount}</p>`;
+
+                    // ---------- CONSTRUIR TABLA ----------
+                    let html = '<h3>Resultados</h3>';
+                    if (uniqueResults.length === 0) {
+                        html += '<p>No se obtuvieron FEN válidos.</p>';
+                    } else {
+                        html += `<table><thead><tr>
+                            <th>Archivo</th>
+                            <th>Página</th>
+                            <th>Tablero</th>
+                            <th>FEN</th>
+                            <th>Acción</th>
+                        </tr></thead><tbody>`;
+                        for (const item of uniqueResults) {
+                            const page = item.page || '-';
+                            const board = item.board || '-';
+                            const fen = item.fen || 'Error';
+                            const isError = !item.fen;
+                            html += `<tr data-fen="${fen}">
+                                <td>${item.file}</td>
+                                <td>${page}</td>
+                                <td>${board}</td>
+                                <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
+                                <td>
+                                    <button class="btn-copy" data-fen="${fen}" ${isError ? 'disabled' : ''}>
+                                        ${isError ? 'Error' : '📋 Copiar y eliminar'}
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }
+                        html += '</tbody></table>';
+                        // Estadísticas
+                        const total = data.results.length;
+                        const uniqueCount = uniqueResults.length;
+                        const duplicates = total - uniqueCount;
+                        html += `<div class="stats">Total FEN obtenidos: ${total} | FEN únicos: ${uniqueCount} | Duplicados eliminados: ${duplicates}</div>`;
+                    }
                     resultDiv.innerHTML = html;
+
+                    // ---------- FUNCIONALIDAD COPIAR Y ELIMINAR ----------
+                    document.querySelectorAll('.btn-copy').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const fen = this.getAttribute('data-fen');
+                            if (!fen || this.disabled) return;
+                            // Copiar al portapapeles
+                            navigator.clipboard.writeText(fen).then(() => {
+                                // Eliminar la fila de la tabla
+                                const row = this.closest('tr');
+                                if (row) {
+                                    row.style.transition = 'all 0.3s';
+                                    row.style.opacity = '0';
+                                    setTimeout(() => {
+                                        row.remove();
+                                        // Actualizar estadísticas
+                                        updateStats();
+                                    }, 300);
+                                }
+                            }).catch(err => {
+                                alert('Error al copiar: ' + err);
+                            });
+                        });
+                    });
+
+                    // Actualizar estadísticas después de eliminar filas
+                    function updateStats() {
+                        const rows = document.querySelectorAll('#result table tbody tr');
+                        const total = rows.length;
+                        const statsDiv = document.querySelector('.stats');
+                        if (statsDiv) {
+                            statsDiv.textContent = `FEN restantes: ${total}`;
+                        }
+                    }
+
                 } else {
                     resultDiv.innerHTML = `<p class="error">Error: ${data.error || 'Respuesta inesperada'}</p>`;
                 }
