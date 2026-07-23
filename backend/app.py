@@ -234,11 +234,11 @@ def upload_files():
 
         if pdf_count > 3:
             return jsonify({'error': 'Máximo 3 archivos PDF'}), 400
-        # ⚠️ REDUCIDO DE 10 A 5 PARA EVITAR TIMEOUT
-        if image_count > 5:
-            return jsonify({'error': 'Máximo 5 imágenes por solicitud'}), 400
-        if len(files) > 5:
-            return jsonify({'error': 'Máximo 5 archivos en total por solicitud'}), 400
+        # ⚠️ RESTAURADO A 10 IMÁGENES
+        if image_count > 10:
+            return jsonify({'error': 'Máximo 10 imágenes por solicitud'}), 400
+        if len(files) > 10:
+            return jsonify({'error': 'Máximo 10 archivos en total por solicitud'}), 400
 
         pages_str = request.form.get('pages', '')
         selected_pages = []
@@ -250,10 +250,12 @@ def upload_files():
 
         results = []
         for file in files:
-            filename = secure_filename(file.filename)
+            # Guardar nombre original para mostrar en el frontend
+            original_filename = file.filename
+            filename = secure_filename(original_filename)
             ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
             file_bytes = file.read()
-            print(f"[INFO] Procesando: {filename} ({len(file_bytes)} bytes)")
+            print(f"[INFO] Procesando: {original_filename} ({len(file_bytes)} bytes)")
 
             if ext == 'pdf':
                 try:
@@ -287,6 +289,7 @@ def upload_files():
                                 fen = process_image_bytes(board_bytes)
                                 if fen:
                                     results.append({
+                                        'original_filename': original_filename,
                                         'file': filename,
                                         'page': page_num,
                                         'board': board_idx + 1,
@@ -295,6 +298,7 @@ def upload_files():
                                     })
                                 else:
                                     results.append({
+                                        'original_filename': original_filename,
                                         'file': filename,
                                         'page': page_num,
                                         'board': board_idx + 1,
@@ -303,10 +307,10 @@ def upload_files():
                                     })
                         except Exception as e:
                             print(f"[ERROR] Página {page_num}: {traceback.format_exc()}")
-                            results.append({'file': filename, 'page': page_num, 'error': f'Error en página {page_num}: {str(e)[:80]}'})
+                            results.append({'original_filename': original_filename, 'file': filename, 'page': page_num, 'error': f'Error en página {page_num}: {str(e)[:80]}'})
                 except Exception as e:
                     print(f"[ERROR] PDF {filename}: {traceback.format_exc()}")
-                    results.append({'file': filename, 'error': f'Error PDF: {str(e)[:80]}'})
+                    results.append({'original_filename': original_filename, 'file': filename, 'error': f'Error PDF: {str(e)[:80]}'})
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
@@ -314,6 +318,7 @@ def upload_files():
                         fen = process_image_bytes(board_bytes)
                         if fen:
                             results.append({
+                                'original_filename': original_filename,
                                 'file': filename,
                                 'board': board_idx + 1,
                                 'fen': fen,
@@ -321,6 +326,7 @@ def upload_files():
                             })
                         else:
                             results.append({
+                                'original_filename': original_filename,
                                 'file': filename,
                                 'board': board_idx + 1,
                                 'fen': None,
@@ -328,9 +334,9 @@ def upload_files():
                             })
                 except Exception as e:
                     print(f"[ERROR] Imagen {filename}: {traceback.format_exc()}")
-                    results.append({'file': filename, 'error': f'Error: {str(e)[:80]}'})
+                    results.append({'original_filename': original_filename, 'file': filename, 'error': f'Error: {str(e)[:80]}'})
             else:
-                results.append({'file': filename, 'error': 'Formato no soportado'})
+                results.append({'original_filename': original_filename, 'file': filename, 'error': 'Formato no soportado'})
 
         shutil.rmtree(app.config['UPLOAD_FOLDER'], ignore_errors=True)
         app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
