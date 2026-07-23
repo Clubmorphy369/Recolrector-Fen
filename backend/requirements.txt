@@ -1,5 +1,4 @@
 Flask==2.3.3
 Werkzeug==2.3.7
 gunicorn==21.2.0
-Pillow==10.1.0
-chess_diagram_to_fen
+requests==2.31.0
