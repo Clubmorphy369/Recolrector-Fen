@@ -27,16 +27,18 @@
 </head>
 <body>
     <h1>♟️ Chess PDF to FEN</h1>
-    <p>Sube imágenes o PDFs. Para PDFs, elige hasta 3 páginas (ej: 1,3,5).</p>
+    <p>Sube imágenes o PDFs con tableros de ajedrez.</p>
     <div class="upload-area">
         <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="fileInput" name="files" accept="image/*, application/pdf" multiple required>
             <div class="pages-input">
-                <label for="pages">Páginas (PDF, separadas por comas):</label>
+                <label for="pages">Páginas (solo PDF, separadas por comas):</label>
                 <input type="text" id="pages" name="pages" placeholder="ej: 1,3,5" value="1">
             </div>
             <button type="submit">Procesar archivos</button>
         </form>
+        <div class="info">📄 PDF: máximo 3 archivos y 3 páginas por archivo.<br>
+        🖼️ Imágenes: máximo 10 archivos.</div>
     </div>
     <div id="status" class="status"></div>
     <div id="result"></div>
@@ -54,7 +56,6 @@
             for (const file of files) {
                 formData.append('files', file);
             }
-            // Añadir las páginas seleccionadas
             const pagesInput = document.getElementById('pages');
             formData.append('pages', pagesInput.value);
 
@@ -97,7 +98,7 @@
                 }
             } catch (error) {
                 statusDiv.textContent = 'Error';
-                resultDiv.innerHTML = `<p class="error">Error de red: ${error.message}. Revisa los logs en Render.</p>`;
+                resultDiv.innerHTML = `<p class="error">Error de red: ${error.message}</p>`;
             }
         });
     </script>
