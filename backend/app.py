@@ -11,10 +11,11 @@ from PIL import Image
 import io
 import traceback
 import shutil
+from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20 MB
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -63,14 +64,12 @@ def detect_boards_in_image(image_bytes, use_grid=True):
         if img is None:
             return [image_bytes]
 
-        # Siempre usar cuadrícula fija (más fiable y ligero)
         if use_grid:
             result = split_grid(img, rows=3, cols=2, margin=10)
             if result:
                 return result
             return [image_bytes]
 
-        # Fallback (solo para imágenes sueltas)
         result = split_grid(img, rows=3, cols=2, margin=10)
         if result:
             return result
@@ -83,7 +82,6 @@ def detect_boards_in_image(image_bytes, use_grid=True):
 def process_image_bytes(image_bytes):
     try:
         img = Image.open(io.BytesIO(image_bytes))
-        # Reducir tamaño para ahorrar memoria
         if img.size[0] > 1000 or img.size[1] > 1000:
             img.thumbnail((1000, 1000))
             buffer = io.BytesIO()
@@ -103,7 +101,7 @@ def process_image_bytes(image_bytes):
         response = requests.post(
             'http://app.chessvision.ai/predict',
             json=payload,
-            timeout=12  # Timeout reducido
+            timeout=12
         )
         print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
         if response.status_code == 200:
@@ -128,8 +126,18 @@ def upload_files():
         files = request.files.getlist('files')
         if not files:
             return jsonify({'error': 'No se seleccionaron archivos'}), 400
-        if len(files) > 3:  # Máximo 3 archivos
+        if len(files) > 3:
             return jsonify({'error': 'Máximo 3 archivos por solicitud'}), 400
+
+        # Obtener lista de páginas (desde el frontend)
+        pages_str = request.form.get('pages', '')
+        selected_pages = []
+        if pages_str:
+            try:
+                # Ejemplo: "1,3,5" -> [1,3,5]
+                selected_pages = [int(p.strip()) for p in pages_str.split(',') if p.strip().isdigit()]
+            except:
+                selected_pages = []
 
         results = []
         for file in files:
@@ -140,12 +148,29 @@ def upload_files():
 
             if ext == 'pdf':
                 try:
-                    # DPI bajo para ahorrar memoria
-                    images = convert_from_bytes(file_bytes, dpi=150)
-                    # Máximo 3 páginas por PDF
-                    if len(images) > 3:
-                        images = images[:3]
-                    for page_num, img in enumerate(images):
+                    # Contar páginas del PDF
+                    reader = PdfReader(io.BytesIO(file_bytes))
+                    total_pages = len(reader.pages)
+                    print(f"[INFO] PDF tiene {total_pages} páginas.")
+
+                    # Si el usuario no especificó páginas, usar la primera página
+                    if not selected_pages:
+                        selected_pages = [1]
+
+                    # Filtrar páginas que existen
+                    valid_pages = [p for p in selected_pages if 1 <= p <= total_pages]
+
+                    if not valid_pages:
+                        return jsonify({'error': 'No hay páginas válidas para procesar'}), 400
+
+                    # Limitar a 3 páginas (por seguridad)
+                    if len(valid_pages) > 3:
+                        valid_pages = valid_pages[:3]
+
+                    # Procesar cada página seleccionada
+                    for page_num in valid_pages:
+                        # Convertir solo esa página (bajo DPI para ahorrar memoria)
+                        img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
                         img_bytes = io.BytesIO()
                         img.save(img_bytes, format='JPEG', quality=75)
                         img_bytes.seek(0)
@@ -154,7 +179,7 @@ def upload_files():
                             fen = process_image_bytes(board_bytes)
                             results.append({
                                 'file': filename,
-                                'page': page_num + 1,
+                                'page': page_num,
                                 'board': board_idx + 1,
                                 'fen': fen if fen else None,
                                 'error': None if fen else 'No se pudo obtener FEN'
