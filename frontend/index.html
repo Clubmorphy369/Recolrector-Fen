@@ -40,9 +40,32 @@
         .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
         .export-section label { font-weight: 600; }
         .export-section .field-group { margin: 0.8rem 0; }
-        .thumbnail-img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
-        .thumbnail-pdf { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 4px; border: 1px solid #ddd; font-size: 2rem; color: #e74c3c; }
-        .board-cell { min-width: 120px; text-align: center; }
+        /* --- NUEVOS TAMAÑOS DE MINIATURA --- */
+        .thumbnail-img {
+            width: 150px;
+            height: 150px;
+            object-fit: contain; /* <--- IMAGEN COMPLETA, SIN RECORTAR */
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            background: white;
+        }
+        .thumbnail-pdf {
+            width: 150px;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            font-size: 2.5rem;
+            color: #e74c3c;
+        }
+        .board-cell {
+            min-width: 160px;
+            text-align: center;
+        }
+        /* --- FIN NUEVOS TAMAÑOS --- */
     </style>
 </head>
 <body>
