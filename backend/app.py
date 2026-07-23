@@ -4,7 +4,7 @@ import requests
 import base64
 import cv2
 import numpy as np
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 from pdf2image import convert_from_bytes
 from PIL import Image
@@ -124,10 +124,6 @@ def detect_boards_contours(image, min_area=3000):
 
 # ---------- DETECCIÓN PRINCIPAL ----------
 def detect_boards_in_image(image_bytes, use_grid=False):
-    """
-    use_grid=True: fuerza división en cuadrícula (para PDFs).
-    use_grid=False: intenta contornos primero; si falla, devuelve la imagen completa.
-    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -140,12 +136,10 @@ def detect_boards_in_image(image_bytes, use_grid=False):
                 return result
             return [image_bytes]
 
-        # Para imágenes sueltas: detección por contornos
         contour_result = detect_boards_contours(img)
         if contour_result:
             return contour_result
 
-        # Fallback: devolver la imagen completa (asumimos un solo tablero)
         _, buffer = cv2.imencode('.jpg', img)
         return [buffer.tobytes()]
     except Exception as e:
@@ -201,7 +195,6 @@ def upload_files():
         if not files:
             return jsonify({'error': 'No se seleccionaron archivos'}), 400
 
-        # Contar PDFs e imágenes
         pdf_count = 0
         image_count = 0
         for f in files:
@@ -260,7 +253,6 @@ def upload_files():
                             img_bytes = io.BytesIO()
                             img.save(img_bytes, format='JPEG', quality=75)
                             img_bytes.seek(0)
-                            # PDFs usan cuadrícula fija
                             board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
                             for board_idx, board_bytes in enumerate(board_images):
                                 fen = process_image_bytes(board_bytes)
@@ -279,7 +271,6 @@ def upload_files():
                     results.append({'file': filename, 'error': f'Error PDF: {str(e)[:80]}'})
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
-                    # Imágenes usan detección por contornos (use_grid=False)
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
                     for board_idx, board_bytes in enumerate(board_images):
                         fen = process_image_bytes(board_bytes)
@@ -302,6 +293,33 @@ def upload_files():
     except Exception as e:
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
+
+# ---------- NUEVO ENDPOINT: EXPORTAR PGN ----------
+@app.route('/export-pgn', methods=['POST'])
+def export_pgn():
+    try:
+        data = request.get_json()
+        fens = data.get('fens', [])
+        if not fens:
+            return jsonify({'error': 'No se proporcionaron FEN'}), 400
+        
+        if len(fens) > 64:
+            fens = fens[:64]
+        
+        # Construir el PGN con todos los FEN
+        pgn_lines = []
+        for fen in fens:
+            pgn_lines.append(f'[FEN "{fen}"]')
+            pgn_lines.append("")  # línea en blanco entre capítulos
+        pgn_text = "\n".join(pgn_lines)
+        
+        # Crear respuesta como archivo descargable
+        response = Response(pgn_text, mimetype='text/plain')
+        response.headers.set("Content-Disposition", "attachment", filename="fen_study.pgn")
+        return response
+    except Exception as e:
+        print(f"[ERROR] export_pgn: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
