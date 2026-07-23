@@ -40,32 +40,19 @@
         .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
         .export-section label { font-weight: 600; }
         .export-section .field-group { margin: 0.8rem 0; }
-        /* --- NUEVOS TAMAÑOS DE MINIATURA --- */
-        .thumbnail-img {
+        /* Miniaturas del tablero recortado */
+        .thumbnail-board {
             width: 150px;
             height: 150px;
-            object-fit: contain; /* <--- IMAGEN COMPLETA, SIN RECORTAR */
+            object-fit: contain;
             border-radius: 6px;
             border: 1px solid #ddd;
             background: white;
-        }
-        .thumbnail-pdf {
-            width: 150px;
-            height: 150px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            font-size: 2.5rem;
-            color: #e74c3c;
         }
         .board-cell {
             min-width: 160px;
             text-align: center;
         }
-        /* --- FIN NUEVOS TAMAÑOS --- */
     </style>
 </head>
 <body>
@@ -123,7 +110,6 @@
             if (!files.length) return;
             for (const file of files) {
                 const url = URL.createObjectURL(file);
-                // Guardar por nombre original (exactamente como aparece en el input)
                 filePreviews[file.name] = url;
                 const ext = file.name.split('.').pop().toLowerCase();
                 if (ext === 'pdf') {
@@ -212,11 +198,7 @@
                             const board = item.board || '-';
                             const fen = item.fen || 'Error';
                             const isError = !item.fen;
-                            // Usar el nombre original para buscar la imagen
                             const originalName = item.original_filename || item.file;
-                            const previewUrl = filePreviews[originalName] || null;
-                            const ext = originalName.split('.').pop().toLowerCase();
-                            const isPdf = ext === 'pdf';
 
                             html += `<tr data-fen="${fen}">
                                 <td>${originalName}</td>
@@ -224,12 +206,9 @@
                                 <td>${board}</td>
                                 <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
                                 <td class="board-cell">
-                                    ${!isError && previewUrl ? 
-                                        (isPdf ? 
-                                            `<div class="thumbnail-pdf">📄</div>` : 
-                                            `<img src="${previewUrl}" class="thumbnail-img" alt="Vista previa">`
-                                        ) : 
-                                        (isError ? '-' : 'Sin imagen')
+                                    ${!isError && item.thumbnail ? 
+                                        `<img src="data:image/jpeg;base64,${item.thumbnail}" class="thumbnail-board" alt="Tablero">` : 
+                                        (isError ? '-' : 'Sin miniatura')
                                     }
                                 </td>
                                 <td>
@@ -288,7 +267,6 @@
                         });
                     });
 
-                    // ---------- ACTUALIZAR ESTADÍSTICAS ----------
                     function updateStats() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const total = rows.length;
@@ -298,7 +276,6 @@
                         }
                     }
 
-                    // ---------- MOSTRAR SECCIÓN DE EXPORTACIÓN ----------
                     const exportSection = document.getElementById('export-section');
                     if (uniqueResults.length > 0) {
                         exportSection.style.display = 'block';
@@ -316,7 +293,6 @@
                         }
                     }
 
-                    // ---------- DESCARGAR PGN ----------
                     document.getElementById('download-pgn-btn').addEventListener('click', async function() {
                         const fenRows = document.querySelectorAll('#result table tbody tr');
                         const fens = [];
