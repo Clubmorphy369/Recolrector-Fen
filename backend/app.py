@@ -11,19 +11,18 @@ from PIL import Image
 import io
 import traceback
 import shutil
-import sys
 
-# Intentar importar PyPDF2, si falla, usamos un método alternativo
+# Intentar importar PyPDF2 para contar páginas
 try:
     from PyPDF2 import PdfReader
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
-    print("[WARN] PyPDF2 no instalado. No se podrá contar páginas.")
+    print("[WARN] PyPDF2 no instalado.")
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -38,7 +37,7 @@ def index():
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
-# ---------- DIVISIÓN POR CUADRÍCULA ----------
+# ---------- DIVISIÓN POR CUADRÍCULA (para PDFs) ----------
 def split_grid(image, rows=3, cols=2, margin=10):
     try:
         h, w = image.shape[:2]
@@ -64,8 +63,71 @@ def split_grid(image, rows=3, cols=2, margin=10):
         print(f"[ERROR] split_grid: {e}")
         return []
 
-# ---------- DETECCIÓN DE TABLEROS ----------
-def detect_boards_in_image(image_bytes, use_grid=True):
+# ---------- DETECCIÓN POR CONTORNOS (para imágenes sueltas) ----------
+def detect_boards_contours(image, min_area=3000):
+    try:
+        h, w = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                       cv2.THRESH_BINARY, 15, 2)
+        kernel = np.ones((5, 5), np.uint8)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        board_rects = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < min_area or area > (h * w * 0.8):
+                continue
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+            if 4 <= len(approx) <= 8:
+                x, y, w_box, h_box = cv2.boundingRect(cnt)
+                aspect = w_box / h_box
+                if 0.5 < aspect < 1.5:
+                    board_rects.append((x, y, w_box, h_box, area))
+
+        board_rects.sort(key=lambda r: r[4], reverse=True)
+        filtered = []
+        for rect in board_rects:
+            x1, y1, w1, h1, _ = rect
+            overlap = False
+            for existing in filtered:
+                x2, y2, w2, h2, _ = existing
+                if (x1 < x2 + w2 and x1 + w1 > x2 and
+                    y1 < y2 + h2 and y1 + h1 > y2):
+                    if rect[4] < existing[4]:
+                        overlap = True
+                        break
+            if not overlap:
+                filtered.append(rect)
+
+        if filtered:
+            cropped = []
+            for (x, y, w_box, h_box, _) in filtered:
+                margin = 10
+                x1 = max(0, x - margin)
+                y1 = max(0, y - margin)
+                x2 = min(w, x + w_box + margin)
+                y2 = min(h, y + h_box + margin)
+                crop = image[y1:y2, x1:x2]
+                _, buffer = cv2.imencode('.jpg', crop)
+                cropped.append(buffer.tobytes())
+            return cropped
+        return None
+    except Exception as e:
+        print(f"[ERROR] detect_boards_contours: {e}")
+        return None
+
+# ---------- DETECCIÓN PRINCIPAL ----------
+def detect_boards_in_image(image_bytes, use_grid=False):
+    """
+    use_grid=True: fuerza división en cuadrícula (para PDFs).
+    use_grid=False: intenta contornos primero; si falla, devuelve la imagen completa.
+    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -78,10 +140,14 @@ def detect_boards_in_image(image_bytes, use_grid=True):
                 return result
             return [image_bytes]
 
-        result = split_grid(img, rows=3, cols=2, margin=10)
-        if result:
-            return result
-        return [image_bytes]
+        # Para imágenes sueltas: detección por contornos
+        contour_result = detect_boards_contours(img)
+        if contour_result:
+            return contour_result
+
+        # Fallback: devolver la imagen completa (asumimos un solo tablero)
+        _, buffer = cv2.imencode('.jpg', img)
+        return [buffer.tobytes()]
     except Exception as e:
         print(f"[ERROR] detect_boards_in_image: {e}")
         return [image_bytes]
@@ -129,7 +195,6 @@ def process_image_bytes(image_bytes):
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
-        # Validar archivos
         if 'files' not in request.files:
             return jsonify({'error': 'No se enviaron archivos'}), 400
         files = request.files.getlist('files')
@@ -146,7 +211,6 @@ def upload_files():
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 image_count += 1
 
-        # Límites
         if pdf_count > 3:
             return jsonify({'error': 'Máximo 3 archivos PDF'}), 400
         if image_count > 10:
@@ -154,7 +218,6 @@ def upload_files():
         if len(files) > 10:
             return jsonify({'error': 'Máximo 10 archivos en total'}), 400
 
-        # Obtener páginas seleccionadas
         pages_str = request.form.get('pages', '')
         selected_pages = []
         if pages_str:
@@ -172,7 +235,6 @@ def upload_files():
 
             if ext == 'pdf':
                 try:
-                    # Contar páginas si es posible
                     total_pages = None
                     if PDF_SUPPORT:
                         try:
@@ -181,21 +243,14 @@ def upload_files():
                             print(f"[INFO] PDF tiene {total_pages} páginas.")
                         except Exception as e:
                             print(f"[WARN] No se pudo contar páginas: {e}")
-
-                    # Si no se pudieron contar, asumir 1 página
                     if total_pages is None:
                         total_pages = 1
 
-                    # Si no se especificaron páginas, usar la página 1
                     if not selected_pages:
                         selected_pages = [1]
-
-                    # Filtrar páginas válidas
                     valid_pages = [p for p in selected_pages if 1 <= p <= total_pages]
                     if not valid_pages:
                         return jsonify({'error': f'No hay páginas válidas (PDF tiene {total_pages} páginas)'}), 400
-
-                    # Limitar a 3 páginas
                     if len(valid_pages) > 3:
                         valid_pages = valid_pages[:3]
 
@@ -205,6 +260,7 @@ def upload_files():
                             img_bytes = io.BytesIO()
                             img.save(img_bytes, format='JPEG', quality=75)
                             img_bytes.seek(0)
+                            # PDFs usan cuadrícula fija
                             board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
                             for board_idx, board_bytes in enumerate(board_images):
                                 fen = process_image_bytes(board_bytes)
@@ -223,6 +279,7 @@ def upload_files():
                     results.append({'file': filename, 'error': f'Error PDF: {str(e)[:80]}'})
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
+                    # Imágenes usan detección por contornos (use_grid=False)
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
                     for board_idx, board_bytes in enumerate(board_images):
                         fen = process_image_bytes(board_bytes)
@@ -238,7 +295,6 @@ def upload_files():
             else:
                 results.append({'file': filename, 'error': 'Formato no soportado'})
 
-        # Limpiar temporales
         shutil.rmtree(app.config['UPLOAD_FOLDER'], ignore_errors=True)
         app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
 
