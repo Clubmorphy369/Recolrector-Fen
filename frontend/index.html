@@ -40,9 +40,9 @@
         .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
         .export-section label { font-weight: 600; }
         .export-section .field-group { margin: 0.8rem 0; }
-        .board-miniature { width: 120px; height: 120px; display: block; }
-        .board-cell { min-width: 130px; text-align: center; }
-        .board-svg { width: 120px; height: 120px; }
+        .thumbnail-img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+        .thumbnail-pdf { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 4px; border: 1px solid #ddd; font-size: 2rem; color: #e74c3c; }
+        .board-cell { min-width: 120px; text-align: center; }
     </style>
 </head>
 <body>
@@ -88,23 +88,36 @@
     </div>
 
     <script>
-        // ---------- VISTA PREVIA DE IMÁGENES ----------
+        // ---------- ALMACENAR PREVISUALIZACIONES DE ARCHIVOS ----------
+        let filePreviews = {};
+
+        // ---------- VISTA PREVIA DE IMÁGENES (arriba) ----------
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const previewDiv = document.getElementById('preview');
             previewDiv.innerHTML = '';
+            filePreviews = {};
             const files = e.target.files;
             if (!files.length) return;
             for (const file of files) {
-                if (!file.type.startsWith('image/')) continue;
-                const reader = new FileReader();
-                reader.onload = function(ev) {
+                const url = URL.createObjectURL(file);
+                const ext = file.name.split('.').pop().toLowerCase();
+                // Guardar para usar luego en la tabla
+                filePreviews[file.name] = url;
+                if (ext === 'pdf') {
+                    // Mostrar icono de PDF en preview
+                    const div = document.createElement('div');
+                    div.style.cssText = 'width:120px;height:120px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-radius:6px;border:1px solid #ddd;font-size:2rem;color:#e74c3c;';
+                    div.textContent = '📄';
+                    div.title = file.name;
+                    previewDiv.appendChild(div);
+                } else if (file.type.startsWith('image/')) {
                     const img = document.createElement('img');
-                    img.src = ev.target.result;
+                    img.src = url;
                     img.alt = file.name;
                     img.title = file.name;
+                    img.style.cssText = 'max-width:120px;max-height:120px;border-radius:6px;border:1px solid #ddd;object-fit:cover;';
                     previewDiv.appendChild(img);
-                };
-                reader.readAsDataURL(file);
+                }
             }
         });
 
@@ -116,89 +129,6 @@
                 return parts.join(' ');
             }
             return fen;
-        }
-
-        // ---------- FUNCIÓN PARA DIBUJAR TABLERO CON SVG PURO ----------
-        function renderBoard(fen, containerId) {
-            const container = document.getElementById(containerId);
-            if (!container) return;
-
-            const size = 120;
-            const sqSize = size / 8;
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('width', size);
-            svg.setAttribute('height', size);
-            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-            svg.setAttribute('class', 'board-svg');
-            container.innerHTML = '';
-            container.appendChild(svg);
-
-            const light = '#f0d9b5';
-            const dark = '#b58863';
-
-            const pieces = {
-                'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
-                'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
-            };
-
-            const fenParts = fen.split(' ');
-            const position = fenParts[0];
-            const turn = fenParts.length > 1 ? fenParts[1] : 'w';
-            const orientation = turn === 'b' ? 'black' : 'white';
-
-            const rows = position.split('/');
-            const displayRows = orientation === 'black' ? [...rows].reverse() : rows;
-
-            for (let r = 0; r < 8; r++) {
-                const row = displayRows[r];
-                let col = 0;
-                const piecesInRow = [];
-                for (let i = 0; i < row.length; i++) {
-                    const ch = row[i];
-                    if (ch >= '1' && ch <= '8') {
-                        const empty = parseInt(ch);
-                        for (let e = 0; e < empty; e++) {
-                            piecesInRow.push(null);
-                        }
-                    } else {
-                        piecesInRow.push(ch);
-                    }
-                }
-                const displayCols = orientation === 'black' ? [...piecesInRow].reverse() : piecesInRow;
-
-                for (let c = 0; c < 8; c++) {
-                    const x = c * sqSize;
-                    const y = r * sqSize;
-                    const isLight = (r + c) % 2 === 0;
-
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    rect.setAttribute('x', x);
-                    rect.setAttribute('y', y);
-                    rect.setAttribute('width', sqSize);
-                    rect.setAttribute('height', sqSize);
-                    rect.setAttribute('fill', isLight ? light : dark);
-                    rect.setAttribute('stroke', '#333');
-                    rect.setAttribute('stroke-width', '0.5');
-                    svg.appendChild(rect);
-
-                    const piece = displayCols[c];
-                    if (piece) {
-                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        text.setAttribute('x', x + sqSize / 2);
-                        text.setAttribute('y', y + sqSize / 2 + 12);
-                        text.setAttribute('font-size', sqSize * 0.75);
-                        text.setAttribute('text-anchor', 'middle');
-                        text.setAttribute('dominant-baseline', 'middle');
-                        text.setAttribute('font-family', 'Arial, sans-serif');
-                        text.textContent = pieces[piece] || piece;
-                        const isWhite = piece === piece.toUpperCase();
-                        text.setAttribute('fill', isWhite ? '#fff' : '#222');
-                        text.setAttribute('stroke', isWhite ? '#222' : '#fff');
-                        text.setAttribute('stroke-width', '1.5');
-                        svg.appendChild(text);
-                    }
-                }
-            }
         }
 
         // ---------- SUBIDA Y PROCESAMIENTO ----------
@@ -231,6 +161,7 @@
                 statusDiv.textContent = 'Procesamiento completado.';
 
                 if (data.success && data.results) {
+                    // ---------- FILTRAR DUPLICADOS ----------
                     const uniqueResults = [];
                     const seenFens = new Set();
                     for (const item of data.results) {
@@ -240,6 +171,7 @@
                         uniqueResults.push(item);
                     }
 
+                    // ---------- CONSTRUIR TABLA ----------
                     let html = '<h3>Resultados</h3>';
                     if (uniqueResults.length === 0) {
                         html += '<p>No se obtuvieron FEN válidos.</p>';
@@ -253,23 +185,32 @@
                             <th>Turno</th>
                             <th>Acción</th>
                         </tr></thead><tbody>`;
-                        let boardIdx = 0;
                         for (const item of uniqueResults) {
                             const page = item.page || '-';
                             const board = item.board || '-';
                             const fen = item.fen || 'Error';
                             const isError = !item.fen;
-                            const boardId = `board-${boardIdx}`;
-                            html += `<tr data-fen="${fen}" data-board-id="${boardId}">
+                            // Buscar la imagen original (por nombre de archivo)
+                            const previewUrl = filePreviews[item.file] || null;
+                            const ext = item.file.split('.').pop().toLowerCase();
+                            const isPdf = ext === 'pdf';
+
+                            html += `<tr data-fen="${fen}">
                                 <td>${item.file}</td>
                                 <td>${page}</td>
                                 <td>${board}</td>
                                 <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
                                 <td class="board-cell">
-                                    ${!isError ? `<div id="${boardId}" class="board-miniature"></div>` : '-'}
+                                    ${!isError && previewUrl ? 
+                                        (isPdf ? 
+                                            `<div class="thumbnail-pdf">📄</div>` : 
+                                            `<img src="${previewUrl}" class="thumbnail-img" alt="Vista previa">`
+                                        ) : 
+                                        (isError ? '-' : 'Sin imagen')
+                                    }
                                 </td>
                                 <td>
-                                    ${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}" data-board-id="${boardId}">🔄</button>` : '-'}
+                                    ${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}">🔄</button>` : '-'}
                                 </td>
                                 <td>
                                     <button class="btn-copy" data-fen="${fen}" ${isError ? 'disabled' : ''}>
@@ -277,7 +218,6 @@
                                     </button>
                                 </td>
                             </tr>`;
-                            boardIdx++;
                         }
                         html += '</tbody></table>';
                         const total = data.results.length;
@@ -287,19 +227,11 @@
                     }
                     resultDiv.innerHTML = html;
 
-                    document.querySelectorAll('[data-board-id]').forEach(row => {
-                        const boardId = row.getAttribute('data-board-id');
-                        const fen = row.getAttribute('data-fen');
-                        if (fen && fen !== 'Error') {
-                            renderBoard(fen, boardId);
-                        }
-                    });
-
+                    // ---------- FUNCIONALIDAD ALTERNAR TURNO ----------
                     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
                         btn.addEventListener('click', function() {
                             const fen = this.getAttribute('data-fen');
-                            const boardId = this.getAttribute('data-board-id');
-                            if (!fen || !boardId) return;
+                            if (!fen) return;
                             const newFen = toggleTurn(fen);
                             const row = this.closest('tr');
                             const fenCell = row.querySelector('.fen-cell');
@@ -308,10 +240,10 @@
                             this.setAttribute('data-fen', newFen);
                             const copyBtn = row.querySelector('.btn-copy');
                             if (copyBtn) copyBtn.setAttribute('data-fen', newFen);
-                            renderBoard(newFen, boardId);
                         });
                     });
 
+                    // ---------- FUNCIONALIDAD COPIAR Y ELIMINAR ----------
                     document.querySelectorAll('.btn-copy').forEach(btn => {
                         btn.addEventListener('click', function() {
                             const fen = this.getAttribute('data-fen');
@@ -333,6 +265,7 @@
                         });
                     });
 
+                    // ---------- ACTUALIZAR ESTADÍSTICAS ----------
                     function updateStats() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const total = rows.length;
@@ -342,6 +275,7 @@
                         }
                     }
 
+                    // ---------- MOSTRAR SECCIÓN DE EXPORTACIÓN ----------
                     const exportSection = document.getElementById('export-section');
                     if (uniqueResults.length > 0) {
                         exportSection.style.display = 'block';
@@ -359,6 +293,7 @@
                         }
                     }
 
+                    // ---------- DESCARGAR PGN ----------
                     document.getElementById('download-pgn-btn').addEventListener('click', async function() {
                         const fenRows = document.querySelectorAll('#result table tbody tr');
                         const fens = [];
