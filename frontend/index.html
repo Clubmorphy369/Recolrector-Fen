@@ -29,9 +29,13 @@
         .btn-copy { background: #2ecc71; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-copy:hover { background: #27ae60; }
         .btn-copy.used { background: #95a5a6; cursor: not-allowed; }
-        .badge-duplicate { background: #f39c12; color: white; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.7rem; margin-left: 0.5rem; }
-        .duplicate-row { background: #fff8e1; }
+        .btn-export { background: #2c3e50; color: white; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 1rem; }
+        .btn-export:hover { background: #1a252f; }
         .stats { margin-top: 1rem; font-size: 0.95rem; color: #333; }
+        .export-section { background: #e8f0fe; padding: 1rem 1.5rem; border-radius: 8px; margin-top: 1.5rem; display: none; }
+        .export-section h4 { margin-top: 0; color: #1a237e; }
+        .export-section p { margin: 0.5rem 0; font-size: 0.9rem; }
+        .export-section .info-lichess { background: #fff3e0; padding: 0.8rem; border-radius: 4px; border-left: 4px solid #f57c00; }
     </style>
 </head>
 <body>
@@ -51,6 +55,20 @@
     </div>
     <div id="status" class="status"></div>
     <div id="result"></div>
+
+    <!-- Sección de exportación PGN -->
+    <div id="export-section" class="export-section">
+        <h4>📥 Exportar a Lichess</h4>
+        <p>Descarga un archivo PGN con todos los FEN (hasta 64). Luego impórtalo en Lichess:</p>
+        <div class="info-lichess">
+            <strong>📖 Cómo importar en Lichess:</strong><br>
+            1. Ve a <a href="https://lichess.org/study" target="_blank">https://lichess.org/study</a> y crea un nuevo estudio.<br>
+            2. Haz clic en <strong>"Añadir capítulo"</strong> → pestaña <strong>"PGN"</strong>.<br>
+            3. Arrastra o pega el contenido del archivo <strong>fen_study.pgn</strong>.<br>
+            4. Haz clic en <strong>"Importar"</strong>. ¡Todos los capítulos se crearán automáticamente!
+        </div>
+        <button id="download-pgn-btn" class="btn-export">📥 Descargar PGN (fen_study.pgn)</button>
+    </div>
 
     <script>
         // ---------- VISTA PREVIA DE IMÁGENES ----------
@@ -108,7 +126,6 @@
                     const seenFens = new Set();
                     for (const item of data.results) {
                         const fen = item.fen || null;
-                        // Si es error o ya vimos este FEN, lo omitimos
                         if (!fen || seenFens.has(fen)) continue;
                         seenFens.add(fen);
                         uniqueResults.push(item);
@@ -144,7 +161,6 @@
                             </tr>`;
                         }
                         html += '</tbody></table>';
-                        // Estadísticas
                         const total = data.results.length;
                         const uniqueCount = uniqueResults.length;
                         const duplicates = total - uniqueCount;
@@ -157,17 +173,15 @@
                         btn.addEventListener('click', function() {
                             const fen = this.getAttribute('data-fen');
                             if (!fen || this.disabled) return;
-                            // Copiar al portapapeles
                             navigator.clipboard.writeText(fen).then(() => {
-                                // Eliminar la fila de la tabla
                                 const row = this.closest('tr');
                                 if (row) {
                                     row.style.transition = 'all 0.3s';
                                     row.style.opacity = '0';
                                     setTimeout(() => {
                                         row.remove();
-                                        // Actualizar estadísticas
                                         updateStats();
+                                        updateExportVisibility();
                                     }, 300);
                                 }
                             }).catch(err => {
@@ -176,7 +190,7 @@
                         });
                     });
 
-                    // Actualizar estadísticas después de eliminar filas
+                    // ---------- ACTUALIZAR ESTADÍSTICAS ----------
                     function updateStats() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const total = rows.length;
@@ -185,6 +199,64 @@
                             statsDiv.textContent = `FEN restantes: ${total}`;
                         }
                     }
+
+                    // ---------- MOSTRAR SECCIÓN DE EXPORTACIÓN ----------
+                    const exportSection = document.getElementById('export-section');
+                    if (uniqueResults.length > 0) {
+                        exportSection.style.display = 'block';
+                    } else {
+                        exportSection.style.display = 'none';
+                    }
+
+                    // ---------- FUNCIÓN PARA ACTUALIZAR VISIBILIDAD ----------
+                    function updateExportVisibility() {
+                        const rows = document.querySelectorAll('#result table tbody tr');
+                        const exportSection = document.getElementById('export-section');
+                        if (rows.length > 0) {
+                            exportSection.style.display = 'block';
+                        } else {
+                            exportSection.style.display = 'none';
+                        }
+                    }
+
+                    // ---------- DESCARGAR PGN ----------
+                    document.getElementById('download-pgn-btn').addEventListener('click', async function() {
+                        const fenRows = document.querySelectorAll('#result table tbody tr');
+                        const fens = [];
+                        fenRows.forEach(row => {
+                            const fenCell = row.querySelector('.fen-cell');
+                            if (fenCell && !fenCell.classList.contains('error')) {
+                                fens.push(fenCell.textContent.trim());
+                            }
+                        });
+                        if (fens.length === 0) {
+                            alert('No hay FEN válidos para exportar.');
+                            return;
+                        }
+                        try {
+                            const response = await fetch('/export-pgn', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ fens: fens })
+                            });
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'fen_study.pgn';
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                window.URL.revokeObjectURL(url);
+                            } else {
+                                const errorData = await response.json();
+                                alert('Error: ' + (errorData.error || 'Error desconocido'));
+                            }
+                        } catch (error) {
+                            alert('Error de red: ' + error.message);
+                        }
+                    });
 
                 } else {
                     resultDiv.innerHTML = `<p class="error">Error: ${data.error || 'Respuesta inesperada'}</p>`;
