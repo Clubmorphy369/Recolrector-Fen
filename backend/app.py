@@ -2,17 +2,17 @@ import os
 import tempfile
 import requests
 import base64
+import cv2
+import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 from pdf2image import convert_from_bytes
 from PIL import Image
 import io
 
-# ⚠️ ESTA LÍNEA ES OBLIGATORIA
 app = Flask(__name__)
 
-# Configuración
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -27,10 +27,69 @@ def index():
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
+def detect_boards_in_image(image_bytes):
+    """Detecta múltiples tableros en una imagen y devuelve una lista de recortes (bytes)."""
+    try:
+        # Convertir bytes a imagen OpenCV
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return [image_bytes]  # Si no se puede leer, devolver original
+        
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Umbral adaptativo para resaltar bordes
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        
+        # Encontrar contornos
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        board_rects = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < 1000:  # Ignorar contornos muy pequeños
+                continue
+            
+            peri = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+            
+            # Si tiene 4 vértices y es aproximadamente cuadrado
+            if len(approx) == 4:
+                x, y, w, h = cv2.boundingRect(contour)
+                aspect_ratio = w / h
+                if 0.8 < aspect_ratio < 1.2:
+                    board_rects.append((x, y, w, h))
+        
+        # Si no se detectaron tableros, devolver la imagen original
+        if not board_rects:
+            return [image_bytes]
+        
+        # Ordenar rectángulos de izquierda a derecha y de arriba a abajo
+        board_rects.sort(key=lambda r: (r[1], r[0]))
+        
+        # Recortar cada tablero y guardarlo como bytes
+        cropped_images = []
+        for (x, y, w, h) in board_rects:
+            # Añadir pequeño margen
+            margin = 10
+            x1 = max(0, x - margin)
+            y1 = max(0, y - margin)
+            x2 = min(img.shape[1], x + w + margin)
+            y2 = min(img.shape[0], y + h + margin)
+            
+            cropped = img[y1:y2, x1:x2]
+            _, buffer = cv2.imencode('.jpg', cropped)
+            cropped_images.append(buffer.tobytes())
+        
+        return cropped_images
+        
+    except Exception as e:
+        print(f"[DEBUG] Error en detección de tableros: {e}")
+        return [image_bytes]  # Si falla, devolver imagen original
+
 def process_image_bytes(image_bytes):
     """Envía la imagen a Chessvision.ai y devuelve el FEN."""
     try:
-        # Redimensionar si la imagen es muy grande (> 2 MB)
+        # Redimensionar si la imagen es muy grande
         img = Image.open(io.BytesIO(image_bytes))
         if img.size[0] > 1500 or img.size[1] > 1500:
             img.thumbnail((1500, 1500))
@@ -85,31 +144,41 @@ def upload_files():
 
         if ext == 'pdf':
             try:
-                # 🔥 MEJORA: Convertir con mayor resolución (300 DPI)
+                # Convertir PDF a imágenes (una por página)
                 images = convert_from_bytes(file_bytes, dpi=300)
                 if len(images) > 20:
                     images = images[:20]
                 for page_num, img in enumerate(images):
-                    # 🔥 MEJORA: Guardar como JPEG de alta calidad
+                    # Guardar página como JPEG
                     img_bytes = io.BytesIO()
                     img.save(img_bytes, format='JPEG', quality=95)
                     img_bytes.seek(0)
-                    fen = process_image_bytes(img_bytes.getvalue())
-                    results.append({
-                        'file': filename,
-                        'page': page_num + 1,
-                        'fen': fen if fen else None,
-                        'error': None if fen else 'No se pudo obtener FEN'
-                    })
+                    
+                    # Detectar y recortar múltiples tableros en la página
+                    board_images = detect_boards_in_image(img_bytes.getvalue())
+                    
+                    for board_idx, board_bytes in enumerate(board_images):
+                        fen = process_image_bytes(board_bytes)
+                        results.append({
+                            'file': filename,
+                            'page': page_num + 1,
+                            'board': board_idx + 1,
+                            'fen': fen if fen else None,
+                            'error': None if fen else 'No se pudo obtener FEN'
+                        })
             except Exception as e:
                 results.append({'file': filename, 'error': f'Error PDF: {str(e)}'})
         elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
-            fen = process_image_bytes(file_bytes)
-            results.append({
-                'file': filename,
-                'fen': fen if fen else None,
-                'error': None if fen else 'No se pudo obtener FEN'
-            })
+            # Para imágenes individuales, también detectar múltiples tableros
+            board_images = detect_boards_in_image(file_bytes)
+            for board_idx, board_bytes in enumerate(board_images):
+                fen = process_image_bytes(board_bytes)
+                results.append({
+                    'file': filename,
+                    'board': board_idx + 1,
+                    'fen': fen if fen else None,
+                    'error': None if fen else 'No se pudo obtener FEN'
+                })
         else:
             results.append({'file': filename, 'error': 'Formato no soportado'})
 
