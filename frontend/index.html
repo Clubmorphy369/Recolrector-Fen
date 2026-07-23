@@ -5,24 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess PDF to FEN</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
         h1 { color: #2c3e50; }
         .upload-area { border: 2px dashed #3498db; padding: 2rem; text-align: center; border-radius: 8px; }
         input[type="file"] { margin: 1rem 0; }
         button { background: #3498db; color: white; border: none; padding: 0.5rem 2rem; border-radius: 4px; cursor: pointer; }
         button:hover { background: #2980b9; }
-        #result { margin-top: 2rem; }
-        table { width: 100%; border-collapse: collapse; }
+        #result { margin-top: 2rem; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
-        th { background: #f2f2f2; }
+        th { background: #f2f2f2; position: sticky; top: 0; }
         .error { color: #e74c3c; }
         .success { color: #27ae60; }
         .status { margin-top: 1rem; font-weight: bold; }
+        .fen-cell { font-family: monospace; font-size: 0.85rem; word-break: break-all; }
     </style>
 </head>
 <body>
     <h1>♟️ Chess PDF to FEN</h1>
-    <p>Sube imágenes o PDFs de tableros de ajedrez. Se extraerá el FEN de cada página/imagen.</p>
+    <p>Sube imágenes o PDFs de tableros de ajedrez. Se extraerá el FEN de cada tablero detectado.</p>
     <div class="upload-area">
         <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="fileInput" name="files" accept="image/*, application/pdf" multiple required>
@@ -61,20 +62,27 @@
                 statusDiv.textContent = 'Procesamiento completado.';
 
                 if (data.success && data.results) {
-                    let html = '<h3>Resultados</h3><table><tr><th>Archivo</th><th>Página</th><th>FEN</th></tr>';
+                    let html = '<h3>Resultados</h3><table><thead><tr>' +
+                        '<th>Archivo</th>' +
+                        '<th>Página</th>' +
+                        '<th>Tablero</th>' +
+                        '<th>FEN / Error</th>' +
+                        '</tr></thead><tbody>';
                     let successCount = 0;
                     for (const item of data.results) {
                         const fen = item.fen || item.error || 'Error';
                         const isError = !item.fen;
                         const page = item.page || '-';
+                        const board = item.board || '-';
                         html += `<tr>
                             <td>${item.file}</td>
                             <td>${page}</td>
-                            <td class="${isError ? 'error' : 'success'}">${fen}</td>
+                            <td>${board}</td>
+                            <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
                         </tr>`;
                         if (item.fen) successCount++;
                     }
-                    html += '</table>';
+                    html += '</tbody></table>';
                     html += `<p>Procesados: ${data.results.length}, FEN obtenidos: ${successCount}</p>`;
                     resultDiv.innerHTML = html;
                 } else {
