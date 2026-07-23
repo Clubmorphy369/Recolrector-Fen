@@ -1,13 +1,11 @@
 import os
 import tempfile
-from flask import Flask, request, send_file, jsonify, render_template_string
+import requests
+from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
-from PIL import Image
-import chess_diagram_to_fen
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 
-# Configuración
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -25,7 +23,7 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'Nombre de archivo vacío'}), 400
     
-    # Verificar que sea una imagen
+    # Validar extensión
     if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
         return jsonify({'error': 'El archivo debe ser una imagen'}), 400
     
@@ -35,20 +33,21 @@ def upload_file():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Procesar la imagen con chess_diagram_to_fen
-        img = Image.open(filepath)
-        result = chess_diagram_to_fen.get_fen(
-            img=img,
-            game="chess",
-            auto_rotate_image=True,
-            auto_rotate_board=True
-        )
+        # Llamar a la API de Lichess
+        with open(filepath, 'rb') as f:
+            response = requests.post(
+                'https://lichess.org/api/image-to-fen',
+                files={'image': f}
+            )
         
-        fen = result.fen
-        return jsonify({'fen': fen, 'success': True})
-        
+        if response.status_code == 200:
+            fen = response.json().get('fen')
+            return jsonify({'fen': fen, 'success': True})
+        else:
+            return jsonify({'error': 'Error al procesar la imagen con Lichess'}), 500
+            
     except Exception as e:
-        return jsonify({'error': f'Error al procesar la imagen: {str(e)}'}), 500
+        return jsonify({'error': f'Error interno: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
