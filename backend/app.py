@@ -12,7 +12,7 @@ import io
 app = Flask(__name__)
 
 # Configuración
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -30,6 +30,14 @@ def static_files(filename):
 def process_image_bytes(image_bytes):
     """Envía la imagen a Chessvision.ai y devuelve el FEN."""
     try:
+        # Redimensionar si la imagen es muy grande (> 2 MB)
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.size[0] > 1500 or img.size[1] > 1500:
+            img.thumbnail((1500, 1500))
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=90)
+            image_bytes = buffer.getvalue()
+        
         encoded_string = base64.b64encode(image_bytes).decode('utf-8')
         payload = {
             "board_orientation": "predict",
@@ -43,6 +51,9 @@ def process_image_bytes(image_bytes):
             json=payload,
             timeout=30
         )
+        print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
+        print(f"[DEBUG] Chessvision.ai response: {response.text[:300]}")
+        
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
@@ -51,6 +62,8 @@ def process_image_bytes(image_bytes):
                 return f"Error: {data.get('message', 'Error desconocido')}"
         else:
             return f"Error HTTP {response.status_code}"
+    except requests.exceptions.Timeout:
+        return "Error: Tiempo de espera agotado"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -72,12 +85,14 @@ def upload_files():
 
         if ext == 'pdf':
             try:
-                images = convert_from_bytes(file_bytes)
+                # 🔥 MEJORA: Convertir con mayor resolución (300 DPI)
+                images = convert_from_bytes(file_bytes, dpi=300)
                 if len(images) > 20:
                     images = images[:20]
                 for page_num, img in enumerate(images):
+                    # 🔥 MEJORA: Guardar como JPEG de alta calidad
                     img_bytes = io.BytesIO()
-                    img.save(img_bytes, format='PNG')
+                    img.save(img_bytes, format='JPEG', quality=95)
                     img_bytes.seek(0)
                     fen = process_image_bytes(img_bytes.getvalue())
                     results.append({
