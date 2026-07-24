@@ -65,93 +65,63 @@ def split_grid(image, rows=3, cols=2, margin=10):
         print(f"[ERROR] split_grid: {e}")
         return []
 
-# ---------- DETECCIÓN DE TABLERO MEJORADA ----------
-def crop_board_center(image, crop_percent=0.70):
-    """
-    Recorta un cuadrado central de la imagen.
-    crop_percent: proporción del lado más pequeño que se recortará (0.70 = 70%).
-    """
-    h, w = image.shape[:2]
-    size = min(h, w)
-    crop_size = int(size * crop_percent)
-    # Calcular centro
-    center_x = w // 2
-    center_y = h // 2
-    half = crop_size // 2
-    x1 = max(0, center_x - half)
-    y1 = max(0, center_y - half)
-    x2 = min(w, center_x + half)
-    y2 = min(h, center_y + half)
-    return image[y1:y2, x1:x2]
+# ---------- DETECCIÓN POR CONTORNOS ----------
+def detect_boards_contours(image, min_area=3000):
+    try:
+        h, w = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                       cv2.THRESH_BINARY, 15, 2)
+        kernel = np.ones((5, 5), np.uint8)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
 
-def detect_board(image):
-    """
-    Intenta detectar el tablero de ajedrez en la imagen.
-    Retorna un recorte del tablero o None si falla.
-    """
-    h, w = image.shape[:2]
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        board_rects = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < min_area or area > (h * w * 0.8):
+                continue
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+            if 4 <= len(approx) <= 8:
+                x, y, w_box, h_box = cv2.boundingRect(cnt)
+                aspect = w_box / h_box
+                if 0.5 < aspect < 1.5:
+                    board_rects.append((x, y, w_box, h_box, area))
 
-    # 1. Usar findChessboardCorners (específico para tableros)
-    ret, corners = cv2.findChessboardCorners(gray, (7, 7), None)
-    if ret:
-        # Obtener rectángulo delimitador de las esquinas
-        pts = corners.reshape(-1, 2)
-        x_min = int(np.min(pts[:, 0]))
-        x_max = int(np.max(pts[:, 0]))
-        y_min = int(np.min(pts[:, 1]))
-        y_max = int(np.max(pts[:, 1]))
-        margin = 10
-        x1 = max(0, x_min - margin)
-        y1 = max(0, y_min - margin)
-        x2 = min(w, x_max + margin)
-        y2 = min(h, y_max + margin)
-        return image[y1:y2, x1:x2]
+        board_rects.sort(key=lambda r: r[4], reverse=True)
+        filtered = []
+        for rect in board_rects:
+            x1, y1, w1, h1, _ = rect
+            overlap = False
+            for existing in filtered:
+                x2, y2, w2, h2, _ = existing
+                if (x1 < x2 + w2 and x1 + w1 > x2 and
+                    y1 < y2 + h2 and y1 + h1 > y2):
+                    if rect[4] < existing[4]:
+                        overlap = True
+                        break
+            if not overlap:
+                filtered.append(rect)
 
-    # 2. Detección por contornos (más tolerante)
-    # Mejorar contraste con CLAHE
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray_eq = clahe.apply(gray)
-    # Umbral adaptativo
-    thresh = cv2.adaptiveThreshold(gray_eq, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                   cv2.THRESH_BINARY, 15, 2)
-    # Morfología para conectar bordes
-    kernel = np.ones((5, 5), np.uint8)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Buscar el contorno más grande que sea aproximadamente cuadrado
-    best_rect = None
-    max_area = 0
-    min_area = 5000  # área mínima para considerar
-
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < min_area:
-            continue
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        if len(approx) == 4:
-            x, y, w_box, h_box = cv2.boundingRect(cnt)
-            aspect = w_box / h_box
-            if 0.7 < aspect < 1.3:  # cuadrado
-                if area > max_area:
-                    max_area = area
-                    best_rect = (x, y, w_box, h_box)
-
-    if best_rect is not None:
-        x, y, w_box, h_box = best_rect
-        margin = 10
-        x1 = max(0, x - margin)
-        y1 = max(0, y - margin)
-        x2 = min(w, x + w_box + margin)
-        y2 = min(h, y + h_box + margin)
-        return image[y1:y2, x1:x2]
-
-    # 3. Fallback: recorte central cuadrado
-    print("[INFO] No se detectó tablero, usando recorte central.")
-    return crop_board_center(image, crop_percent=0.75)
+        if filtered:
+            cropped = []
+            for (x, y, w_box, h_box, _) in filtered:
+                margin = 10
+                x1 = max(0, x - margin)
+                y1 = max(0, y - margin)
+                x2 = min(w, x + w_box + margin)
+                y2 = min(h, y + h_box + margin)
+                crop = image[y1:y2, x1:x2]
+                cropped.append(crop)
+            return cropped
+        return None
+    except Exception as e:
+        print(f"[ERROR] detect_boards_contours: {e}")
+        return None
 
 # ---------- DETECCIÓN PRINCIPAL ----------
 def detect_boards_in_image(image_bytes, use_grid=False):
@@ -165,20 +135,15 @@ def detect_boards_in_image(image_bytes, use_grid=False):
             result = split_grid(img, rows=3, cols=2, margin=10)
             if result:
                 return result
-            # Si grid falla, intentar detección individual
-            board = detect_board(img)
-            if board is not None:
-                return [board]
             return [img]
 
-        # Para imágenes sueltas, detectar un solo tablero
-        board = detect_board(img)
-        if board is not None:
-            return [board]
+        contour_result = detect_boards_contours(img)
+        if contour_result:
+            return contour_result
 
-        # Fallback: recorte central
-        central_crop = crop_board_center(img, crop_percent=0.75)
-        return [central_crop]
+        # Fallback: imagen completa
+        print("[INFO] No se detectaron tableros por contornos, usando imagen completa.")
+        return [img]
     except Exception as e:
         print(f"[ERROR] detect_boards_in_image: {e}")
         return [image_bytes]
@@ -190,6 +155,7 @@ def process_board_image(board_img, original_img_bytes=None):
     error_msg = None
 
     try:
+        # Si no hay board_img, usar la imagen original completa
         if board_img is None:
             if original_img_bytes is not None:
                 nparr = np.frombuffer(original_img_bytes, np.uint8)
@@ -239,13 +205,18 @@ def process_board_image(board_img, original_img_bytes=None):
         if board_img is not None and len(board_img.shape) == 3:
             h, w = board_img.shape[:2]
             size = 200
+            # Calcular factor de escala para que quepa en 200x200 manteniendo relación de aspecto
             scale = min(size / w, size / h) if w > 0 and h > 0 else 1.0
             new_w = max(1, int(w * scale))
             new_h = max(1, int(h * scale))
+            # Redimensionar
             resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            # Crear canvas blanco
             canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
+            # Calcular offset para centrar
             x_offset = (size - new_w) // 2
             y_offset = (size - new_h) // 2
+            # Pegar la imagen redimensionada en el canvas
             canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
             _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
