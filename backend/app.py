@@ -14,13 +14,6 @@ import shutil
 from datetime import datetime, timezone
 import re
 
-# Ya no usamos python-chess para validar (es demasiado estricto)
-# pero mantenemos el import por si se necesita en el futuro
-try:
-    import chess
-except ImportError:
-    chess = None
-
 app = Flask(__name__)
 
 app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
@@ -30,19 +23,14 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 
-# ---------- FUNCIÓN PARA LIMPIAR FEN (sin validación estricta) ----------
+# ---------- FUNCIÓN PARA LIMPIAR FEN ----------
 def clean_fen(raw_fen):
-    """Limpia el FEN devuelto por Chessvision.ai y lo devuelve si tiene al menos 6 campos."""
     if not raw_fen:
         return None
-    # Reemplazar guiones bajos por espacios
     fen = raw_fen.replace('_', ' ')
-    # Dividir en campos y quedarse con los 6 primeros
     parts = fen.split()
     if len(parts) >= 6:
-        # Si hay más de 6, truncar
-        fen = ' '.join(parts[:6])
-        return fen
+        return ' '.join(parts[:6])
     return None
 
 @app.route('/')
@@ -53,7 +41,7 @@ def index():
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
-# ---------- DIVISIÓN POR CUADRÍCULA (para PDFs) ----------
+# ---------- DIVISIÓN POR CUADRÍCULA ----------
 def split_grid(image, rows=3, cols=2, margin=10):
     try:
         h, w = image.shape[:2]
@@ -78,7 +66,7 @@ def split_grid(image, rows=3, cols=2, margin=10):
         print(f"[ERROR] split_grid: {e}")
         return []
 
-# ---------- DETECCIÓN POR CONTORNOS (para imágenes sueltas) ----------
+# ---------- DETECCIÓN POR CONTORNOS ----------
 def detect_boards_contours(image, min_area=3000):
     try:
         h, w = image.shape[:2]
@@ -136,7 +124,7 @@ def detect_boards_contours(image, min_area=3000):
         print(f"[ERROR] detect_boards_contours: {e}")
         return None
 
-# ---------- DETECCIÓN PRINCIPAL ----------
+# ---------- DETECCIÓN PRINCIPAL (SIEMPRE DEVUELVE AL MENOS LA IMAGEN COMPLETA) ----------
 def detect_boards_in_image(image_bytes, use_grid=False):
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -148,22 +136,37 @@ def detect_boards_in_image(image_bytes, use_grid=False):
             result = split_grid(img, rows=3, cols=2, margin=10)
             if result:
                 return result
+            # Fallback: imagen completa
             return [img]
 
         contour_result = detect_boards_contours(img)
         if contour_result:
             return contour_result
 
+        # Fallback: imagen completa (asumimos un solo tablero)
+        print("[INFO] No se detectaron tableros por contornos, usando imagen completa.")
         return [img]
     except Exception as e:
         print(f"[ERROR] detect_boards_in_image: {e}")
         return [image_bytes]
 
 # ---------- PROCESAR UN TABLERO (FEN + MINIATURA) ----------
-def process_board_image(board_img):
-    """Procesa una imagen de tablero (recortada) y devuelve FEN y miniatura base64."""
+def process_board_image(board_img, original_img_bytes=None):
+    """Procesa una imagen de tablero (recortada) y devuelve FEN y miniatura base64.
+       Si board_img es None o falla, usa original_img_bytes como fallback."""
+    fen = None
+    thumbnail_b64 = None
+
     try:
-        # --- Obtener FEN (usando la imagen recortada) ---
+        # --- Si no hay board_img, usar la imagen original completa ---
+        if board_img is None:
+            if original_img_bytes is not None:
+                nparr = np.frombuffer(original_img_bytes, np.uint8)
+                board_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if board_img is None:
+                return None, None
+
+        # --- Obtener FEN ---
         _, board_bytes = cv2.imencode('.jpg', board_img)
         board_bytes = board_bytes.tobytes()
 
@@ -183,21 +186,24 @@ def process_board_image(board_img):
             "predict_turn": True
         }
         response = requests.post('http://app.chessvision.ai/predict', json=payload, timeout=10)
-        fen = None
+        print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
                 raw_fen = data.get('result')
-                # Limpiar FEN sin validación estricta
                 fen = clean_fen(raw_fen)
                 if fen:
                     print(f"[INFO] FEN obtenido: {fen}")
                 else:
                     print(f"[WARN] FEN no válido: {raw_fen}")
+            else:
+                print(f"[WARN] Chessvision.ai devolvió success=false: {data}")
+        else:
+            print(f"[ERROR] Chessvision.ai error: {response.text}")
 
-        # --- Generar miniatura (150x150) del tablero recortado ---
+        # --- Generar miniatura (200x200) del tablero recortado ---
         h, w = board_img.shape[:2]
-        size = 150
+        size = 200
         if h > w:
             new_w = size
             new_h = int(h * size / w)
@@ -287,14 +293,13 @@ def upload_files():
                             img.save(img_bytes, format='JPEG', quality=75)
                             img_bytes.seek(0)
                             board_images = detect_boards_in_image(img_bytes.getvalue(), use_grid=True)
-                            for board_idx, board_img in enumerate(board_images):
-                                fen, thumbnail = process_board_image(board_img)
+                            for board_img in board_images:
+                                fen, thumbnail = process_board_image(board_img, original_img_bytes=file_bytes)
                                 if fen and thumbnail:
                                     results.append({
                                         'original_filename': original_filename,
                                         'file': filename,
                                         'page': page_num,
-                                        'board': board_idx + 1,
                                         'fen': fen,
                                         'thumbnail': thumbnail,
                                         'error': None
@@ -304,10 +309,9 @@ def upload_files():
                                         'original_filename': original_filename,
                                         'file': filename,
                                         'page': page_num,
-                                        'board': board_idx + 1,
                                         'fen': None,
                                         'thumbnail': thumbnail if thumbnail else None,
-                                        'error': 'FEN inválido' if not fen else 'Error en thumbnail'
+                                        'error': 'FEN no obtenido'
                                     })
                         except Exception as e:
                             print(f"[ERROR] Página {page_num}: {traceback.format_exc()}")
@@ -318,13 +322,12 @@ def upload_files():
             elif ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
                 try:
                     board_images = detect_boards_in_image(file_bytes, use_grid=False)
-                    for board_idx, board_img in enumerate(board_images):
-                        fen, thumbnail = process_board_image(board_img)
+                    for board_img in board_images:
+                        fen, thumbnail = process_board_image(board_img, original_img_bytes=file_bytes)
                         if fen and thumbnail:
                             results.append({
                                 'original_filename': original_filename,
                                 'file': filename,
-                                'board': board_idx + 1,
                                 'fen': fen,
                                 'thumbnail': thumbnail,
                                 'error': None
@@ -333,10 +336,9 @@ def upload_files():
                             results.append({
                                 'original_filename': original_filename,
                                 'file': filename,
-                                'board': board_idx + 1,
                                 'fen': None,
                                 'thumbnail': thumbnail if thumbnail else None,
-                                'error': 'FEN inválido' if not fen else 'Error en thumbnail'
+                                'error': 'FEN no obtenido'
                             })
                 except Exception as e:
                     print(f"[ERROR] Imagen {filename}: {traceback.format_exc()}")
