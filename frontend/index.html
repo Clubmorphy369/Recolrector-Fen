@@ -41,23 +41,10 @@
         .export-section input { padding: 0.5rem; width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 4px; margin-top: 0.2rem; }
         .export-section label { font-weight: 600; }
         .export-section .field-group { margin: 0.8rem 0; }
-        /* Miniaturas más grandes */
-        .thumbnail-board {
-            width: 200px;
-            height: 200px;
-            object-fit: contain;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            background: white;
-        }
-        .board-cell {
-            min-width: 210px;
-            text-align: center;
-        }
-        /* Columna de acciones con iconos */
-        .action-cell {
-            white-space: nowrap;
-        }
+        .thumbnail-board { width: 200px; height: 200px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; background: white; }
+        .board-cell { min-width: 210px; text-align: center; }
+        .action-cell { white-space: nowrap; }
+        .error-msg { font-size: 0.8rem; color: #e74c3c; }
     </style>
 </head>
 <body>
@@ -173,12 +160,17 @@
                 statusDiv.textContent = 'Procesamiento completado.';
 
                 if (data.success && data.results) {
-                    // ---------- FILTRAR DUPLICADOS ----------
+                    // ---------- FILTRAR DUPLICADOS (solo los que tienen FEN) ----------
                     const uniqueResults = [];
                     const seenFens = new Set();
                     for (const item of data.results) {
                         const fen = item.fen || null;
-                        if (!fen || seenFens.has(fen)) continue;
+                        if (!fen) {
+                            // Guardar también los errores para mostrar
+                            uniqueResults.push(item);
+                            continue;
+                        }
+                        if (seenFens.has(fen)) continue;
                         seenFens.add(fen);
                         uniqueResults.push(item);
                     }
@@ -186,7 +178,7 @@
                     // ---------- CONSTRUIR TABLA ----------
                     let html = '<h3>Resultados</h3>';
                     if (uniqueResults.length === 0) {
-                        html += '<p>No se obtuvieron FEN válidos.</p>';
+                        html += '<p>No se obtuvieron resultados.</p>';
                     } else {
                         html += `<table><thead><tr>
                             <th>Archivo</th>
@@ -200,16 +192,20 @@
                             const page = item.page || '-';
                             const fen = item.fen || 'Error';
                             const isError = !item.fen;
+                            const errorMsg = item.error || '';
                             const originalName = item.original_filename || item.file;
 
                             html += `<tr data-fen="${fen}">
                                 <td>${originalName}</td>
                                 <td>${page}</td>
-                                <td class="${isError ? 'error' : 'success'} fen-cell">${fen}</td>
+                                <td class="${isError ? 'error' : 'success'} fen-cell">
+                                    ${fen}
+                                    ${isError ? `<span class="error-msg"> (${errorMsg})</span>` : ''}
+                                </td>
                                 <td class="board-cell">
-                                    ${!isError && item.thumbnail ? 
+                                    ${item.thumbnail ? 
                                         `<img src="data:image/jpeg;base64,${item.thumbnail}" class="thumbnail-board" alt="Tablero">` : 
-                                        (isError ? '-' : 'Sin miniatura')
+                                        '-'
                                     }
                                 </td>
                                 <td>
@@ -222,9 +218,9 @@
                         }
                         html += '</tbody></table>';
                         const total = data.results.length;
-                        const uniqueCount = uniqueResults.length;
+                        const uniqueCount = uniqueResults.filter(r => r.fen).length;
                         const duplicates = total - uniqueCount;
-                        html += `<div class="stats">Total FEN obtenidos: ${total} | FEN únicos: ${uniqueCount} | Duplicados eliminados: ${duplicates}</div>`;
+                        html += `<div class="stats">Total procesados: ${total} | FEN únicos: ${uniqueCount} | Duplicados/erróneos: ${duplicates}</div>`;
                     }
                     resultDiv.innerHTML = html;
 
@@ -278,7 +274,8 @@
 
                     // ---------- MOSTRAR SECCIÓN DE EXPORTACIÓN ----------
                     const exportSection = document.getElementById('export-section');
-                    if (uniqueResults.length > 0) {
+                    const hasFens = uniqueResults.some(r => r.fen);
+                    if (hasFens) {
                         exportSection.style.display = 'block';
                     } else {
                         exportSection.style.display = 'none';
@@ -287,11 +284,11 @@
                     function updateExportVisibility() {
                         const rows = document.querySelectorAll('#result table tbody tr');
                         const exportSection = document.getElementById('export-section');
-                        if (rows.length > 0) {
-                            exportSection.style.display = 'block';
-                        } else {
-                            exportSection.style.display = 'none';
-                        }
+                        const hasFenRows = rows.length > 0 && Array.from(rows).some(row => {
+                            const fenCell = row.querySelector('.fen-cell');
+                            return fenCell && !fenCell.classList.contains('error');
+                        });
+                        exportSection.style.display = hasFenRows ? 'block' : 'none';
                     }
 
                     // ---------- DESCARGAR PGN ----------
