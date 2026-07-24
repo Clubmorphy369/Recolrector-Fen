@@ -13,7 +13,6 @@ import traceback
 import shutil
 from datetime import datetime, timezone
 import re
-import sys
 
 app = Flask(__name__)
 
@@ -202,22 +201,27 @@ def process_board_image(board_img, original_img_bytes=None):
             error_msg = f"Chessvision.ai HTTP {response.status_code}: {response.text[:100]}"
             print(f"[ERROR] {error_msg}")
 
-        # --- Generar miniatura (200x200) del tablero ---
-        h, w = board_img.shape[:2]
-        size = 200
-        if h > w:
-            new_w = size
-            new_h = int(h * size / w)
+        # --- Generar miniatura (200x200) ---
+        if board_img is not None and len(board_img.shape) == 3:
+            h, w = board_img.shape[:2]
+            size = 200
+            # Calcular factor de escala para que quepa en 200x200 manteniendo relación de aspecto
+            scale = min(size / w, size / h) if w > 0 and h > 0 else 1.0
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            # Redimensionar
+            resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            # Crear canvas blanco
+            canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
+            # Calcular offset para centrar
+            x_offset = (size - new_w) // 2
+            y_offset = (size - new_h) // 2
+            # Pegar la imagen redimensionada en el canvas
+            canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+            _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
         else:
-            new_h = size
-            new_w = int(w * size / h)
-        resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
-        x_offset = (size - new_w) // 2
-        y_offset = (size - new_h) // 2
-        canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-        _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-        thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
+            error_msg = "Imagen de tablero no válida para miniatura"
 
         return fen, thumbnail_b64, error_msg
     except Exception as e:
