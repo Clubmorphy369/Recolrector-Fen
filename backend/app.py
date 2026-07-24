@@ -13,15 +13,13 @@ import traceback
 import shutil
 from datetime import datetime, timezone
 import re
-import chess
 
-# Intentar importar PyPDF2 para contar páginas
+# Ya no usamos python-chess para validar (es demasiado estricto)
+# pero mantenemos el import por si se necesita en el futuro
 try:
-    from PyPDF2 import PdfReader
-    PDF_SUPPORT = True
+    import chess
 except ImportError:
-    PDF_SUPPORT = False
-    print("[WARN] PyPDF2 no instalado.")
+    chess = None
 
 app = Flask(__name__)
 
@@ -32,24 +30,20 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 
-# ---------- FUNCIÓN PARA LIMPIAR Y VALIDAR FEN ----------
-def clean_and_validate_fen(raw_fen):
+# ---------- FUNCIÓN PARA LIMPIAR FEN (sin validación estricta) ----------
+def clean_fen(raw_fen):
+    """Limpia el FEN devuelto por Chessvision.ai y lo devuelve si tiene al menos 6 campos."""
     if not raw_fen:
         return None
+    # Reemplazar guiones bajos por espacios
     fen = raw_fen.replace('_', ' ')
+    # Dividir en campos y quedarse con los 6 primeros
     parts = fen.split()
-    if len(parts) > 6:
+    if len(parts) >= 6:
+        # Si hay más de 6, truncar
         fen = ' '.join(parts[:6])
-    elif len(parts) < 6:
-        return None
-    try:
-        board = chess.Board(fen)
-        if board.is_valid():
-            return fen
-        else:
-            return None
-    except:
-        return None
+        return fen
+    return None
 
 @app.route('/')
 def index():
@@ -169,12 +163,10 @@ def detect_boards_in_image(image_bytes, use_grid=False):
 def process_board_image(board_img):
     """Procesa una imagen de tablero (recortada) y devuelve FEN y miniatura base64."""
     try:
-        # --- Obtener FEN ---
-        # Convertir la imagen (OpenCV) a bytes para enviar a Chessvision.ai
+        # --- Obtener FEN (usando la imagen recortada) ---
         _, board_bytes = cv2.imencode('.jpg', board_img)
         board_bytes = board_bytes.tobytes()
 
-        # Redimensionar para Chessvision.ai
         img = Image.open(io.BytesIO(board_bytes))
         if img.size[0] > 1000 or img.size[1] > 1000:
             img.thumbnail((1000, 1000))
@@ -182,7 +174,6 @@ def process_board_image(board_img):
             img.save(buffer, format='JPEG', quality=75)
             board_bytes = buffer.getvalue()
 
-        # Llamar a Chessvision.ai
         encoded_string = base64.b64encode(board_bytes).decode('utf-8')
         payload = {
             "board_orientation": "predict",
@@ -197,10 +188,14 @@ def process_board_image(board_img):
             data = response.json()
             if data.get('success'):
                 raw_fen = data.get('result')
-                fen = clean_and_validate_fen(raw_fen)
+                # Limpiar FEN sin validación estricta
+                fen = clean_fen(raw_fen)
+                if fen:
+                    print(f"[INFO] FEN obtenido: {fen}")
+                else:
+                    print(f"[WARN] FEN no válido: {raw_fen}")
 
-        # --- Generar miniatura (150x150) ---
-        # Redimensionar el tablero a 150x150 manteniendo relación de aspecto
+        # --- Generar miniatura (150x150) del tablero recortado ---
         h, w = board_img.shape[:2]
         size = 150
         if h > w:
@@ -210,13 +205,10 @@ def process_board_image(board_img):
             new_h = size
             new_w = int(w * size / h)
         resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        # Poner en un canvas de 150x150 con fondo blanco
         canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
         x_offset = (size - new_w) // 2
         y_offset = (size - new_h) // 2
         canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-
-        # Codificar a base64 JPEG
         _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
 
@@ -270,13 +262,13 @@ def upload_files():
             if ext == 'pdf':
                 try:
                     total_pages = None
-                    if PDF_SUPPORT:
-                        try:
-                            reader = PdfReader(io.BytesIO(file_bytes))
-                            total_pages = len(reader.pages)
-                            print(f"[INFO] PDF tiene {total_pages} páginas.")
-                        except Exception as e:
-                            print(f"[WARN] No se pudo contar páginas: {e}")
+                    try:
+                        from PyPDF2 import PdfReader
+                        reader = PdfReader(io.BytesIO(file_bytes))
+                        total_pages = len(reader.pages)
+                        print(f"[INFO] PDF tiene {total_pages} páginas.")
+                    except:
+                        print(f"[WARN] No se pudo contar páginas, asumiendo 1.")
                     if total_pages is None:
                         total_pages = 1
 
@@ -314,8 +306,8 @@ def upload_files():
                                         'page': page_num,
                                         'board': board_idx + 1,
                                         'fen': None,
-                                        'thumbnail': None,
-                                        'error': 'FEN inválido'
+                                        'thumbnail': thumbnail if thumbnail else None,
+                                        'error': 'FEN inválido' if not fen else 'Error en thumbnail'
                                     })
                         except Exception as e:
                             print(f"[ERROR] Página {page_num}: {traceback.format_exc()}")
@@ -343,8 +335,8 @@ def upload_files():
                                 'file': filename,
                                 'board': board_idx + 1,
                                 'fen': None,
-                                'thumbnail': None,
-                                'error': 'FEN inválido'
+                                'thumbnail': thumbnail if thumbnail else None,
+                                'error': 'FEN inválido' if not fen else 'Error en thumbnail'
                             })
                 except Exception as e:
                     print(f"[ERROR] Imagen {filename}: {traceback.format_exc()}")
