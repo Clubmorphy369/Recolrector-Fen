@@ -40,7 +40,7 @@ def index():
 def static_files(filename):
     return send_from_directory(FRONTEND_DIR, filename)
 
-# ---------- DIVISIÓN POR CUADRÍCULA ----------
+# ---------- DIVISIÓN POR CUADRÍCULA (legacy) ----------
 def split_grid(image, rows=3, cols=2, margin=10):
     try:
         h, w = image.shape[:2]
@@ -65,7 +65,7 @@ def split_grid(image, rows=3, cols=2, margin=10):
         print(f"[ERROR] split_grid: {e}")
         return []
 
-# ---------- DETECCIÓN POR CONTORNOS ----------
+# ---------- DETECCIÓN POR CONTORNOS (legacy) ----------
 def detect_boards_contours(image, min_area=3000):
     try:
         h, w = image.shape[:2]
@@ -123,7 +123,7 @@ def detect_boards_contours(image, min_area=3000):
         print(f"[ERROR] detect_boards_contours: {e}")
         return None
 
-# ---------- DETECCIÓN PRINCIPAL ----------
+# ---------- DETECCIÓN PRINCIPAL (legacy) ----------
 def detect_boards_in_image(image_bytes, use_grid=False):
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -141,7 +141,6 @@ def detect_boards_in_image(image_bytes, use_grid=False):
         if contour_result:
             return contour_result
 
-        # Fallback: imagen completa
         print("[INFO] No se detectaron tableros por contornos, usando imagen completa.")
         return [img]
     except Exception as e:
@@ -155,7 +154,6 @@ def process_board_image(board_img, original_img_bytes=None):
     error_msg = None
 
     try:
-        # Si no hay board_img, usar la imagen original completa
         if board_img is None:
             if original_img_bytes is not None:
                 nparr = np.frombuffer(original_img_bytes, np.uint8)
@@ -163,7 +161,6 @@ def process_board_image(board_img, original_img_bytes=None):
             if board_img is None:
                 return None, None, "No se pudo obtener imagen de tablero"
 
-        # --- Obtener FEN ---
         _, board_bytes = cv2.imencode('.jpg', board_img)
         board_bytes = board_bytes.tobytes()
 
@@ -205,18 +202,13 @@ def process_board_image(board_img, original_img_bytes=None):
         if board_img is not None and len(board_img.shape) == 3:
             h, w = board_img.shape[:2]
             size = 200
-            # Calcular factor de escala para que quepa en 200x200 manteniendo relación de aspecto
             scale = min(size / w, size / h) if w > 0 and h > 0 else 1.0
             new_w = max(1, int(w * scale))
             new_h = max(1, int(h * scale))
-            # Redimensionar
             resized = cv2.resize(board_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-            # Crear canvas blanco
             canvas = np.ones((size, size, 3), dtype=np.uint8) * 255
-            # Calcular offset para centrar
             x_offset = (size - new_w) // 2
             y_offset = (size - new_h) // 2
-            # Pegar la imagen redimensionada en el canvas
             canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
             _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
@@ -229,7 +221,11 @@ def process_board_image(board_img, original_img_bytes=None):
         print(f"[ERROR] process_board_image: {err}")
         return None, None, err
 
-# ---------- ENDPOINT DE SUBIDA ----------
+# ============================================================
+#  ENDPOINTS
+# ============================================================
+
+# ---------- ENDPOINT ORIGINAL (subida directa, legacy) ----------
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
@@ -359,6 +355,97 @@ def upload_files():
     except Exception as e:
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
+
+# ---------- NUEVO: EXTRAER PÁGINAS DE PDF ----------
+@app.route('/extract-pdf-pages', methods=['POST'])
+def extract_pdf_pages():
+    try:
+        if 'files' not in request.files:
+            return jsonify({'error': 'No se enviaron archivos'}), 400
+        file = request.files['files']
+        if not file:
+            return jsonify({'error': 'Archivo vacío'}), 400
+        
+        file_bytes = file.read()
+        pages_str = request.form.get('pages', '1')
+        selected_pages = [int(p.strip()) for p in pages_str.split(',') if p.strip().isdigit()]
+        if not selected_pages:
+            selected_pages = [1]
+        
+        # Limitar a 3 páginas
+        selected_pages = selected_pages[:3]
+        
+        result = []
+        for page_num in selected_pages:
+            try:
+                img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format='JPEG', quality=75)
+                img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+                result.append({
+                    'number': page_num,
+                    'image': img_b64
+                })
+            except Exception as e:
+                print(f"[ERROR] Página {page_num}: {e}")
+                continue
+        
+        return jsonify({'success': True, 'pages': result})
+    except Exception as e:
+        print(f"[ERROR] extract_pdf_pages: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+# ---------- NUEVO: PROCESAR RECORTE MANUAL ----------
+@app.route('/process-cropped', methods=['POST'])
+def process_cropped():
+    try:
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({'error': 'No se envió imagen'}), 400
+        
+        image_b64 = data['image']
+        # Eliminar prefijo data:image/...
+        if ',' in image_b64:
+            image_b64 = image_b64.split(',')[1]
+        
+        image_bytes = base64.b64decode(image_b64)
+        original_name = data.get('originalName', 'unknown')
+        page = data.get('page', None)
+        
+        # Procesar la imagen (sin detección de contornos, usamos la imagen tal cual)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        board_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if board_img is None:
+            return jsonify({'error': 'No se pudo decodificar la imagen'}), 400
+        
+        fen, thumbnail, error = process_board_image(board_img, original_img_bytes=image_bytes)
+        
+        if fen and thumbnail:
+            return jsonify({
+                'success': True,
+                'result': {
+                    'fen': fen,
+                    'thumbnail': thumbnail,
+                    'originalName': original_name,
+                    'page': page,
+                    'error': None
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': error or 'No se pudo obtener FEN',
+                'result': {
+                    'fen': None,
+                    'thumbnail': thumbnail if thumbnail else None,
+                    'originalName': original_name,
+                    'page': page,
+                    'error': error or 'No se pudo obtener FEN'
+                }
+            })
+    except Exception as e:
+        print(f"[ERROR] process_cropped: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 # ---------- EXPORTAR PGN ----------
 @app.route('/export-pgn', methods=['POST'])
