@@ -22,7 +22,7 @@
             border-radius: 16px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
-        h1 { color: #2c3e50; font-size: 2.2rem; display: flex; align-items: center; gap: 12px; }
+        h1 { color: #2c3e50; font-size: 2.2rem; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .subtitle { color: #7f8c8d; margin-bottom: 25px; }
         .card {
             background: white;
@@ -64,6 +64,7 @@
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-success { background: #2ecc71; }
         .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
         .btn-warning { background: #f39c12; }
         .btn-purple { background: #9b59b6; }
         .btn-purple:hover { background: #8e44ad; }
@@ -74,7 +75,6 @@
         }
         .btn-outline:hover { background: #3498db; color: white; }
         .btn-sm { padding: 6px 12px; font-size: 0.85rem; min-height: 34px; min-width: 34px; }
-        .btn-xs { padding: 4px 10px; font-size: 0.75rem; min-height: 28px; min-width: 28px; }
         .form-control {
             width: 100%;
             padding: 10px 12px;
@@ -112,7 +112,6 @@
         }
         .preview-item img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* ===== CONTENEDOR DE RECORTE ===== */
         #cropContainer {
             position: relative;
             border: 1px solid #ddd;
@@ -145,7 +144,7 @@
         }
         .crop-box.active {
             border-color: #9b59b6;
-            background: rgba(155,89,182,0.12);
+            background: rgba(155,89,182,0.15);
             box-shadow: 0 0 0 9999px rgba(0,0,0,0.20);
             z-index: 2;
         }
@@ -165,6 +164,21 @@
         .crop-box.active .crop-label {
             background: #9b59b6;
         }
+        .crop-box .crop-close {
+            position: absolute;
+            top: -22px;
+            right: 4px;
+            background: #e74c3c;
+            color: white;
+            font-size: 0.6rem;
+            padding: 1px 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            pointer-events: auto;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .crop-box .crop-close:hover { background: #c0392b; }
         .resize-handle {
             position: absolute;
             width: 18px;
@@ -214,8 +228,6 @@
             font-weight: 500;
             color: #2e7d32;
         }
-
-        /* ===== TABLA DE RESULTADOS ===== */
         #result { margin-top: 20px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         th, td { border: 1px solid #ddd; padding: 0.6rem 0.8rem; text-align: left; vertical-align: middle; }
@@ -226,7 +238,7 @@
         .thumbnail-board { width: 150px; height: 150px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; background: white; }
         .board-cell { min-width: 160px; text-align: center; }
         .action-cell { white-space: nowrap; }
-        .btn-copy { background: transparent; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.5rem; transition: 0.2s; }
+        .btn-copy { background: transparent; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.5rem; }
         .btn-copy:hover { transform: scale(1.2); }
         .btn-toggle-turn { background: #f39c12; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-toggle-turn:hover { background: #e67e22; }
@@ -292,7 +304,7 @@
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
     <p class="subtitle">Añade múltiples recuadros a la vez, ajústalos y aplica todas las plantillas automáticamente.</p>
 
-    <!-- ===== PASO 1: SUBIR ARCHIVOS ===== -->
+    <!-- PASO 1 -->
     <div class="card">
         <div class="card-header"><i class="fas fa-upload"></i> Paso 1: Subir archivos</div>
         <div class="upload-area">
@@ -308,29 +320,25 @@
         </div>
     </div>
 
-    <!-- ===== PASO 2: RECORTE MÚLTIPLE ===== -->
+    <!-- PASO 2 -->
     <div class="card hidden" id="cropSection">
         <div class="card-header">
             <i class="fas fa-crop-alt"></i>
             <span>Paso 2: Añadir y ajustar recuadros</span>
             <span class="badge" id="imageProgress">Imagen 1 de 1</span>
         </div>
-
         <div class="status-bar" id="statusBar">
             🎯 Haz clic en "Añadir recuadro" para cada tablero. Arrástralos y redimensiónalos.
         </div>
-
         <div class="template-controls">
             <button class="btn btn-success btn-sm" id="addBoxBtn"><i class="fas fa-plus"></i> Añadir recuadro</button>
-            <button class="btn btn-purple btn-sm" id="addGridBtn"><i class="fas fa-th"></i> Cuadrícula 3x2</button>
+            <button class="btn btn-danger btn-sm" id="delBoxBtn" disabled><i class="fas fa-minus-circle"></i> Eliminar activo</button>
             <button class="btn btn-warning btn-sm" id="clearBoxesBtn"><i class="fas fa-trash"></i> Eliminar todos</button>
             <button class="btn btn-primary btn-sm" id="saveTemplatesBtn" disabled><i class="fas fa-save"></i> Guardar plantillas</button>
         </div>
-
         <div id="cropContainer">
             <img id="cropImage" />
         </div>
-
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
             <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar imagen</button>
@@ -342,7 +350,7 @@
         </p>
     </div>
 
-    <!-- ===== RESULTADOS ===== -->
+    <!-- RESULTADOS -->
     <div id="resultContainer" class="hidden">
         <div class="card">
             <div class="card-header"><i class="fas fa-list"></i> Resultados</div>
@@ -350,7 +358,7 @@
         </div>
     </div>
 
-    <!-- ===== EXPORTACIÓN PGN ===== -->
+    <!-- EXPORTACIÓN -->
     <div class="export-section" id="exportSection">
         <h4><i class="fas fa-file-export"></i> Exportar a Lichess</h4>
         <p>Descarga un archivo PGN con todos los FEN (hasta 64). Luego impórtalo en Lichess.</p>
@@ -373,28 +381,27 @@
     </div>
 </div>
 
-<!-- ===== NOTIFICACIÓN ===== -->
 <div class="notification" id="notification"><i class="fas fa-check-circle"></i> <span id="notifText">Listo</span></div>
 
 <script>
 // ============================================================
-//  SISTEMA DE MÚLTIPLES RECUADROS SIMULTÁNEOS
+//  SISTEMA DE MÚLTIPLES RECUADROS SIMULTÁNEOS - CORREGIDO
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
 
 // Estado
 let originalImage = null;
-let cropBoxes = [];           // Array de objetos { x, y, w, h, element, label, index }
+let cropBoxes = [];
 let activeBoxIndex = -1;
 let imageItems = [];
 let currentIndex = 0;
 let results = [];
-let savedTemplates = [];      // Plantillas guardadas (coordenadas relativas)
+let savedTemplates = [];
 let templatesSaved = false;
 let processingAll = false;
 
-// Elementos DOM
+// DOM
 const cropSection = document.getElementById('cropSection');
 const cropImage = document.getElementById('cropImage');
 const cropContainer = document.getElementById('cropContainer');
@@ -405,7 +412,7 @@ const cropSkipBtn = document.getElementById('cropSkipBtn');
 const statusBar = document.getElementById('statusBar');
 
 const addBoxBtn = document.getElementById('addBoxBtn');
-const addGridBtn = document.getElementById('addGridBtn');
+const delBoxBtn = document.getElementById('delBoxBtn');
 const clearBoxesBtn = document.getElementById('clearBoxesBtn');
 const saveTemplatesBtn = document.getElementById('saveTemplatesBtn');
 const applyAllBtn = document.getElementById('applyAllBtn');
@@ -484,6 +491,19 @@ function createBoxElement(x, y, w, h, label) {
     lbl.textContent = label || `#${cropBoxes.length+1}`;
     box.appendChild(lbl);
 
+    // Botón cerrar (✕) para eliminar individualmente
+    const close = document.createElement('span');
+    close.className = 'crop-close';
+    close.textContent = '✕';
+    close.title = 'Eliminar este recuadro';
+    close.addEventListener('mousedown', (e) => e.stopPropagation());
+    close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(box.dataset.index);
+        removeBox(idx);
+    });
+    box.appendChild(close);
+
     // Tiradores
     const dirs = ['nw', 'ne', 'sw', 'se'];
     dirs.forEach(d => {
@@ -492,14 +512,14 @@ function createBoxElement(x, y, w, h, label) {
         box.appendChild(handle);
     });
 
-    // Eventos
+    // Eventos arrastre
     box.addEventListener('mousedown', (e) => {
-        if (e.target.classList.contains('resize-handle')) return;
+        if (e.target.classList.contains('resize-handle') || e.target.classList.contains('crop-close')) return;
         activateBox(box);
         startDragBox(e, box);
     });
     box.addEventListener('touchstart', (e) => {
-        if (e.target.classList.contains('resize-handle')) return;
+        if (e.target.classList.contains('resize-handle') || e.target.classList.contains('crop-close')) return;
         activateBox(box);
         startDragBoxTouch(e, box);
     }, { passive: false });
@@ -525,17 +545,14 @@ function createBoxElement(x, y, w, h, label) {
 
 function addBox(x, y, w, h, label) {
     const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return;
-
+    if (size.w === 0 || size.h === 0) return null;
     if (x === undefined) {
-        // Recuadro inicial: 25% del centro
         const boxSize = Math.min(size.w, size.h) * 0.25;
         x = (size.w - boxSize) / 2;
         y = (size.h - boxSize) / 2;
         w = boxSize;
         h = boxSize;
     }
-
     const box = createBoxElement(x, y, w, h, label || `#${cropBoxes.length+1}`);
     const data = { x, y, w, h, element: box, label: label || `#${cropBoxes.length+1}`, index: cropBoxes.length };
     cropBoxes.push(data);
@@ -558,7 +575,7 @@ function removeBox(index) {
     updateBoxLabels();
     if (activeBoxIndex >= cropBoxes.length) activeBoxIndex = cropBoxes.length - 1;
     if (activeBoxIndex >= 0) activateBox(cropBoxes[activeBoxIndex].element);
-    else activeBoxIndex = -1;
+    else { activeBoxIndex = -1; delBoxBtn.disabled = true; }
     updateUI();
 }
 
@@ -566,8 +583,8 @@ function clearBoxes() {
     cropBoxes.forEach(b => b.element.remove());
     cropBoxes = [];
     activeBoxIndex = -1;
+    delBoxBtn.disabled = true;
     updateUI();
-    updateBoxLabels();
 }
 
 function activateBox(element) {
@@ -576,8 +593,10 @@ function activateBox(element) {
         element.classList.add('active');
         const idx = parseInt(element.dataset.index);
         activeBoxIndex = idx;
+        delBoxBtn.disabled = false;
     } else {
         activeBoxIndex = -1;
+        delBoxBtn.disabled = true;
     }
 }
 
@@ -589,16 +608,19 @@ function updateBoxLabels() {
 }
 
 function updateUI() {
-    saveTemplatesBtn.disabled = (cropBoxes.length === 0);
+    const hasBoxes = cropBoxes.length > 0;
+    saveTemplatesBtn.disabled = !hasBoxes;
     const hasSaved = savedTemplates.length > 0 && templatesSaved;
     applyAllBtn.disabled = !hasSaved;
-    statusBar.textContent = cropBoxes.length > 0 ?
+    statusBar.textContent = hasBoxes ?
         `🎯 ${cropBoxes.length} recuadros activos. Ajusta cada uno al tablero correspondiente.` :
         '🎯 Haz clic en "Añadir recuadro" para cada tablero.';
+    // Si no hay recuadros, desactivar el botón de eliminar activo
+    if (!hasBoxes) delBoxBtn.disabled = true;
 }
 
 // ============================================================
-//  ARRASTRE Y REDIMENSIÓN (similar al original pero para cada box)
+//  ARRASTRE Y REDIMENSIÓN
 // ============================================================
 
 let dragData = null;
@@ -750,7 +772,6 @@ function processDrag(clientX, clientY) {
             data.y = newY;
         }
     }
-    // Actualizar elemento
     data.element.style.left = data.x + 'px';
     data.element.style.top = data.y + 'px';
     data.element.style.width = data.w + 'px';
@@ -761,18 +782,16 @@ function onDragEnd(e) {
     document.removeEventListener('mousemove', onDragMove);
     document.removeEventListener('mouseup', onDragEnd);
     dragData = null;
-    updateUI();
 }
 
 function onDragEndTouch(e) {
     document.removeEventListener('touchmove', onDragMoveTouch);
     document.removeEventListener('touchend', onDragEndTouch);
     dragData = null;
-    updateUI();
 }
 
 // ============================================================
-//  BOTONES DE RECUADROS
+//  BOTONES
 // ============================================================
 
 addBoxBtn.addEventListener('click', function() {
@@ -781,29 +800,16 @@ addBoxBtn.addEventListener('click', function() {
     showNotification('Recuadro añadido. Ajusta su posición y tamaño.');
 });
 
-addGridBtn.addEventListener('click', function() {
-    if (!originalImage) return;
-    const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return;
-    // Cuadrícula 3 filas x 2 columnas
-    const rows = 3, cols = 2;
-    const cellW = size.w / cols;
-    const cellH = size.h / rows;
-    const margin = 10;
-    clearBoxes();
-    let count = 0;
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const x = c * cellW + margin/2;
-            const y = r * cellH + margin/2;
-            const w = cellW - margin;
-            const h = cellH - margin;
-            if (w > 20 && h > 20) {
-                addBox(x, y, w, h, `#${++count}`);
-            }
-        }
+delBoxBtn.addEventListener('click', function() {
+    if (activeBoxIndex === -1) return;
+    const idx = activeBoxIndex;
+    // Desactivar antes de eliminar para evitar errores
+    const box = cropBoxes[idx];
+    if (box) {
+        box.element.classList.remove('active');
     }
-    showNotification(`Cuadrícula ${rows}x${cols} creada. Ajusta cada recuadro.`);
+    removeBox(idx);
+    showNotification('Recuadro eliminado');
 });
 
 clearBoxesBtn.addEventListener('click', function() {
@@ -812,10 +818,6 @@ clearBoxesBtn.addEventListener('click', function() {
     clearBoxes();
     showNotification('Recuadros eliminados.');
 });
-
-// ============================================================
-//  GUARDAR PLANTILLAS
-// ============================================================
 
 saveTemplatesBtn.addEventListener('click', function() {
     if (cropBoxes.length === 0) {
@@ -836,7 +838,7 @@ saveTemplatesBtn.addEventListener('click', function() {
 });
 
 // ============================================================
-//  APLICAR PLANTILLAS A UNA IMAGEN
+//  APLICAR PLANTILLAS
 // ============================================================
 
 async function applyTemplatesToImage(imageDataUrl, originalName, page) {
@@ -949,13 +951,19 @@ function showCropItem(index) {
         cropImage.src = canvas.toDataURL('image/jpeg');
         cropImage.onload = function() {
             // Si es la primera imagen y no hay recuadros, crear uno por defecto
-            if (index === 0 && cropBoxes.length === 0) {
+            if (index === 0 && cropBoxes.length === 0 && !templatesSaved) {
                 addBox();
             }
-            // Restaurar recuadros si ya había guardados (solo si es la primera imagen)
-            if (index === 0 && savedTemplates.length > 0 && templatesSaved) {
-                // Si ya hay plantillas, las mostramos en la imagen actual
-                // (pero no las reaplicamos automáticamente)
+            // Si ya hay plantillas guardadas y estamos en la primera imagen, no hacemos nada
+            // Si estamos en otra imagen, no mostramos los recuadros (no son editables)
+            // pero los recuadros solo aparecen en la primera imagen.
+            // Para otras imágenes, ocultamos todos los recuadros si no estamos editando.
+            if (index !== 0) {
+                // Ocultar recuadros en otras imágenes para no confundir
+                cropBoxes.forEach(b => b.element.style.display = 'none');
+            } else {
+                // Mostrar recuadros solo en la primera
+                cropBoxes.forEach(b => b.element.style.display = '');
             }
             updateUI();
         };
@@ -967,7 +975,10 @@ function showCropItem(index) {
     cropNextBtn.disabled = (index === imageItems.length - 1);
 }
 
-// ===== SUBIR ARCHIVOS =====
+// ============================================================
+//  SUBIR ARCHIVOS
+// ============================================================
+
 uploadForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     const files = fileInput.files;
@@ -1054,7 +1065,10 @@ uploadForm.addEventListener('submit', async function(e) {
     }
 });
 
-// ===== NAVEGACIÓN =====
+// ============================================================
+//  NAVEGACIÓN
+// ============================================================
+
 cropPrevBtn.addEventListener('click', function() {
     if (currentIndex > 0) {
         currentIndex--;
@@ -1067,6 +1081,7 @@ cropNextBtn.addEventListener('click', function() {
         currentIndex++;
         showCropItem(currentIndex);
     } else {
+        // Si estamos en la última imagen, cerrar la sección de recorte
         cropSection.classList.add('hidden');
         if (results.length > 0) showResults();
         else showNotification('No se extrajo ningún tablero.');
@@ -1241,7 +1256,7 @@ document.getElementById('downloadPgnBtn').addEventListener('click', async functi
 });
 
 // ============================================================
-//  VISTA PREVIA DE ARCHIVOS
+//  VISTA PREVIA
 // ============================================================
 
 fileInput.addEventListener('change', function() {
@@ -1267,12 +1282,6 @@ fileInput.addEventListener('change', function() {
     }
     uploadBtn.disabled = false;
 });
-
-// ============================================================
-//  INICIO: creación de recuadro por defecto al cargar imagen
-// ============================================================
-
-// (se crea automáticamente al cargar la primera imagen)
 </script>
 </body>
 </html>
