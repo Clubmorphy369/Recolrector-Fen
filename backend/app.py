@@ -16,7 +16,8 @@ import re
 
 app = Flask(__name__)
 
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
+# Aumentar límite de tamaño para 60 imágenes
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -179,7 +180,7 @@ def process_board_image(board_img, original_img_bytes=None):
             "image": f"data:image/jpeg;base64,{encoded_string}",
             "predict_turn": True
         }
-        response = requests.post('http://app.chessvision.ai/predict', json=payload, timeout=15)
+        response = requests.post('http://app.chessvision.ai/predict', json=payload, timeout=30)  # aumentar timeout
         print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
@@ -225,9 +226,10 @@ def process_board_image(board_img, original_img_bytes=None):
 #  ENDPOINTS
 # ============================================================
 
-# ---------- ENDPOINT ORIGINAL (subida directa, legacy) ----------
+# ---------- ENDPOINT ORIGINAL (legacy) ----------
 @app.route('/upload', methods=['POST'])
 def upload_files():
+    # (sin cambios, se mantiene por compatibilidad)
     try:
         if 'files' not in request.files:
             return jsonify({'error': 'No se enviaron archivos'}), 400
@@ -356,7 +358,7 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- NUEVO: EXTRAER PÁGINAS DE PDF ----------
+# ---------- NUEVO: EXTRAER PÁGINAS DE PDF (SIN LÍMITE DE 3) ----------
 @app.route('/extract-pdf-pages', methods=['POST'])
 def extract_pdf_pages():
     try:
@@ -372,8 +374,12 @@ def extract_pdf_pages():
         if not selected_pages:
             selected_pages = [1]
         
-        # Limitar a 3 páginas
-        selected_pages = selected_pages[:3]
+        # 🔥 QUITAMOS EL LÍMITE DE 3 PÁGINAS – ahora soporta hasta 60
+        # selected_pages = selected_pages[:3]   <-- ELIMINADO
+        
+        # Limitar a 60 páginas para evitar sobrecarga
+        if len(selected_pages) > 60:
+            selected_pages = selected_pages[:60]
         
         result = []
         for page_num in selected_pages:
@@ -388,6 +394,11 @@ def extract_pdf_pages():
                 })
             except Exception as e:
                 print(f"[ERROR] Página {page_num}: {e}")
+                # Devolver error en esa página para que el frontend pueda mostrar qué falló
+                result.append({
+                    'number': page_num,
+                    'error': str(e)[:100]
+                })
                 continue
         
         return jsonify({'success': True, 'pages': result})
@@ -404,7 +415,6 @@ def process_cropped():
             return jsonify({'error': 'No se envió imagen'}), 400
         
         image_b64 = data['image']
-        # Eliminar prefijo data:image/...
         if ',' in image_b64:
             image_b64 = image_b64.split(',')[1]
         
@@ -412,7 +422,6 @@ def process_cropped():
         original_name = data.get('originalName', 'unknown')
         page = data.get('page', None)
         
-        # Procesar la imagen (sin detección de contornos, usamos la imagen tal cual)
         nparr = np.frombuffer(image_bytes, np.uint8)
         board_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if board_img is None:
