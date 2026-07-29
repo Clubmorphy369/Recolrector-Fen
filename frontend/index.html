@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Recorte rápido con plantilla</title>
+    <title>Chess PDF to FEN - Multi-plantilla</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -74,6 +74,7 @@
         }
         .btn-outline:hover { background: #3498db; color: white; }
         .btn-sm { padding: 6px 12px; font-size: 0.85rem; min-height: 34px; min-width: 34px; }
+        .btn-xs { padding: 4px 10px; font-size: 0.75rem; min-height: 28px; min-width: 28px; }
         .form-control {
             width: 100%;
             padding: 10px 12px;
@@ -146,6 +147,11 @@
             pointer-events: auto;
             will-change: left, top, width, height;
         }
+        .crop-box.highlight {
+            border-color: #9b59b6;
+            background: rgba(155,89,182,0.15);
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.25);
+        }
         .resize-handle {
             position: absolute;
             width: 22px;
@@ -176,14 +182,54 @@
             color: #27ae60;
             margin: 8px 0;
         }
+
+        /* ===== PLANTILLAS ===== */
+        .template-section {
+            background: #f3e8ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 12px 0;
+            border-left: 4px solid #9b59b6;
+        }
         .template-controls {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             justify-content: center;
-            margin: 12px 0;
+            margin: 10px 0;
         }
         .template-controls .btn { flex: 0 1 auto; }
+        .template-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            min-height: 40px;
+            margin-top: 10px;
+        }
+        .template-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #9b59b6;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .template-badge .remove-tpl {
+            cursor: pointer;
+            opacity: 0.7;
+            transition: 0.2s;
+        }
+        .template-badge .remove-tpl:hover {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+
         .crop-controls {
             display: flex;
             flex-wrap: wrap;
@@ -249,6 +295,15 @@
             background: #3498db;
             color: white;
         }
+        .status-bar {
+            background: #e8f5e9;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: 500;
+            color: #2e7d32;
+        }
         @media (max-width: 768px) {
             #cropContainer { height: 360px; }
             .resize-handle { width: 26px; height: 26px; }
@@ -270,7 +325,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Sube imágenes o PDFs. Ajusta el recuadro, guarda plantilla y aplica a todas las imágenes para un procesamiento rápido.</p>
+    <p class="subtitle">Selecciona los tableros en la primera página, guarda las plantillas, y aplícalas automáticamente al resto.</p>
 
     <!-- ===== PASO 1: SUBIR ARCHIVOS ===== -->
     <div class="card">
@@ -288,20 +343,17 @@
         </div>
     </div>
 
-    <!-- ===== PASO 2: RECORTE MANUAL (CON PLANTILLA) ===== -->
+    <!-- ===== PASO 2: RECORTE Y PLANTILLAS ===== -->
     <div class="card hidden" id="cropSection">
         <div class="card-header">
             <i class="fas fa-crop-alt"></i>
             <span>Paso 2: Seleccionar tableros</span>
             <span class="badge" id="imageProgress">Imagen 1 de 1</span>
         </div>
-        <div class="extracted-count" id="extractedCount">📌 Extraídos de esta imagen: 0</div>
 
-        <!-- CONTROLES DE PLANTILLA -->
-        <div class="template-controls">
-            <button class="btn btn-outline btn-sm" id="saveTemplateBtn"><i class="fas fa-save"></i> Guardar plantilla</button>
-            <button class="btn btn-outline btn-sm" id="applyTemplateBtn" disabled><i class="fas fa-paste"></i> Aplicar plantilla</button>
-            <button class="btn btn-purple btn-sm" id="applyAllBtn" disabled><i class="fas fa-bolt"></i> Aplicar y procesar todas</button>
+        <!-- Estado -->
+        <div class="status-bar" id="statusBar">
+            📐 Modo: Selección de plantillas - Ajusta el recuadro y añade cada tablero
         </div>
 
         <div id="cropContainer">
@@ -314,14 +366,31 @@
             </div>
         </div>
 
+        <!-- Plantillas -->
+        <div class="template-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                <strong><i class="fas fa-clone"></i> Plantillas guardadas</strong>
+                <span id="templateCount" style="font-size:0.9rem;color:#7f8c8d;">0</span>
+            </div>
+            <div class="template-list" id="templateList">
+                <span style="color:#999;font-size:0.9rem;">No hay plantillas. Ajusta el recuadro y añade cada tablero.</span>
+            </div>
+            <div class="template-controls">
+                <button class="btn btn-success btn-sm" id="addTemplateBtn"><i class="fas fa-plus"></i> Añadir plantilla</button>
+                <button class="btn btn-purple btn-sm" id="finishTemplatesBtn" disabled><i class="fas fa-check-double"></i> Finalizar plantillas</button>
+                <button class="btn btn-outline btn-sm" id="clearTemplatesBtn"><i class="fas fa-trash"></i> Limpiar</button>
+            </div>
+        </div>
+
+        <!-- Controles de navegación -->
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
-            <button class="btn btn-success" id="cropConfirmBtn" disabled><i class="fas fa-check"></i> Recortar y guardar</button>
             <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar imagen</button>
-            <button class="btn btn-primary" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
+            <button class="btn btn-purple" id="applyAllBtn" disabled><i class="fas fa-bolt"></i> Aplicar y procesar todas</button>
+            <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Después de recortar un tablero, la imagen permanece para que puedas recortar el siguiente.
+            💡 En la primera página, ajusta el recuadro para cada tablero y haz clic en "Añadir plantilla".
         </p>
     </div>
 
@@ -361,12 +430,12 @@
 
 <script>
 // ============================================================
-//  SISTEMA DE RECORTE CON PLANTILLA
+//  SISTEMA DE RECORTE CON MÚLTIPLES PLANTILLAS
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
 
-let originalImage = null;        // imagen original (sin escalar)
+let originalImage = null;
 let cropBox = null;
 let isDragging = false, isResizing = false;
 let resizeDirection = null;
@@ -374,26 +443,49 @@ let startX, startY;
 let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
 let startCropX, startCropY, startCropW, startCropH;
 
-// Plantilla (coordenadas relativas en porcentaje)
-let template = null;  // { x, y, w, h }  valores entre 0 y 1
+// Variables de plantillas
+let templates = [];              // Array de {x, y, w, h, label}
+let templatesFinalized = false;  // Si ya se finalizaron
 
-// Elementos del recorte
+// Variables de imágenes
+let imageItems = [];
+let currentIndex = 0;
+let results = [];
+let processingAll = false;
+
+// Elementos DOM
 const cropSection = document.getElementById('cropSection');
 const cropImage = document.getElementById('cropImage');
 const cropContainer = document.getElementById('cropContainer');
 const cropCounter = document.getElementById('imageProgress');
-const cropConfirmBtn = document.getElementById('cropConfirmBtn');
 const cropPrevBtn = document.getElementById('cropPrevBtn');
 const cropNextBtn = document.getElementById('cropNextBtn');
 const cropSkipBtn = document.getElementById('cropSkipBtn');
-const extractedCountSpan = document.getElementById('extractedCount');
+const statusBar = document.getElementById('statusBar');
 
-// Botones de plantilla
-const saveTemplateBtn = document.getElementById('saveTemplateBtn');
-const applyTemplateBtn = document.getElementById('applyTemplateBtn');
+// Elementos de plantillas
+const addTemplateBtn = document.getElementById('addTemplateBtn');
+const finishTemplatesBtn = document.getElementById('finishTemplatesBtn');
+const clearTemplatesBtn = document.getElementById('clearTemplatesBtn');
+const templateList = document.getElementById('templateList');
+const templateCount = document.getElementById('templateCount');
 const applyAllBtn = document.getElementById('applyAllBtn');
 
-// ===== FUNCIONES DE RECORTE =====
+// Elementos generales
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const uploadForm = document.getElementById('uploadForm');
+const previewDiv = document.getElementById('preview');
+const pagesInput = document.getElementById('pagesInput');
+const resultDiv = document.getElementById('result');
+const resultContainer = document.getElementById('resultContainer');
+const exportSection = document.getElementById('exportSection');
+const notif = document.getElementById('notification');
+const notifText = document.getElementById('notifText');
+
+// ============================================================
+//  FUNCIONES DE RECORTE (sin cambios)
+// ============================================================
 function getPointerPosition(e) {
     if (e.touches) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
     return { clientX: e.clientX, clientY: e.clientY };
@@ -418,6 +510,18 @@ function updateCropBox() {
     cropBox.style.height = cropH + 'px';
 }
 
+function resetCropToCenter() {
+    const displayW = cropImage.naturalWidth || cropImage.width;
+    const displayH = cropImage.naturalHeight || cropImage.height;
+    if (displayW === 0 || displayH === 0) return;
+    const size = 0.25;
+    cropX = (displayW - displayW * size) / 2;
+    cropY = (displayH - displayH * size) / 2;
+    cropW = displayW * size;
+    cropH = displayH * size;
+    updateCropBox();
+}
+
 function initCropBox() {
     cropBox = document.querySelector('.crop-box');
     if (!cropBox) return;
@@ -429,18 +533,7 @@ function initCropBox() {
         return;
     }
 
-    // Si hay plantilla guardada, aplicarla
-    if (template) {
-        applyTemplate();
-    } else {
-        // Recuadro inicial: 25% del centro
-        const size = 0.25;
-        cropX = (displayW - displayW * size) / 2;
-        cropY = (displayH - displayH * size) / 2;
-        cropW = displayW * size;
-        cropH = displayH * size;
-        updateCropBox();
-    }
+    resetCropToCenter();
 
     // Eventos
     const handles = cropBox.querySelectorAll('.resize-handle');
@@ -465,11 +558,10 @@ function initCropBox() {
     document.addEventListener('touchend', stopInteractionTouch, { passive: false });
 
     cropBox.classList.remove('hidden');
-    cropConfirmBtn.disabled = false;
     updateTemplateButtons();
 }
 
-// ===== MANEJADORES (ratón y táctil) =====
+// ===== MANEJADORES =====
 function startDrag(e) {
     if (e.target.classList.contains('resize-handle')) return;
     e.preventDefault();
@@ -583,7 +675,6 @@ function getCroppedDataURL() {
     const origY = cropY * scaleY;
     const origW = cropW * scaleX;
     const origH = cropH * scaleY;
-
     const canvas = document.createElement('canvas');
     const outW = Math.round(origW);
     const outH = Math.round(origH);
@@ -592,6 +683,19 @@ function getCroppedDataURL() {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(originalImage, origX, origY, origW, origH, 0, 0, outW, outH);
     return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+// ===== OBTENER PLANTILLA DESDE EL RECORTE ACTUAL =====
+function getTemplateFromCrop() {
+    const displayW = cropImage.naturalWidth || cropImage.width;
+    const displayH = cropImage.naturalHeight || cropImage.height;
+    if (displayW === 0 || displayH === 0) return null;
+    return {
+        x: cropX / displayW,
+        y: cropY / displayH,
+        w: cropW / displayW,
+        h: cropH / displayH
+    };
 }
 
 // ===== ESCALAR IMAGEN =====
@@ -608,93 +712,247 @@ function scaleImageToMaxWidth(img, maxWidth) {
 }
 
 // ============================================================
-//  PLANTILLA
+//  GESTIÓN DE PLANTILLAS
 // ============================================================
-function getTemplateFromCrop() {
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-    if (displayW === 0 || displayH === 0) return null;
-    return {
-        x: cropX / displayW,
-        y: cropY / displayH,
-        w: cropW / displayW,
-        h: cropH / displayH
-    };
-}
 
-function applyTemplate() {
-    if (!template) return;
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-    if (displayW === 0 || displayH === 0) return;
-    cropX = template.x * displayW;
-    cropY = template.y * displayH;
-    cropW = template.w * displayW;
-    cropH = template.h * displayH;
-    updateCropBox();
+function updateTemplateList() {
+    templateList.innerHTML = '';
+    if (templates.length === 0) {
+        templateList.innerHTML = '<span style="color:#999;font-size:0.9rem;">No hay plantillas. Ajusta el recuadro y añade cada tablero.</span>';
+        templateCount.textContent = '0';
+        return;
+    }
+    templates.forEach((t, idx) => {
+        const badge = document.createElement('span');
+        badge.className = 'template-badge';
+        badge.innerHTML = `
+            ${t.label || `Tablero ${idx+1}`}
+            <span class="remove-tpl" data-idx="${idx}" title="Eliminar">✕</span>
+        `;
+        templateList.appendChild(badge);
+        badge.querySelector('.remove-tpl').addEventListener('click', function(e) {
+            e.stopPropagation();
+            const idx = parseInt(this.dataset.idx);
+            templates.splice(idx, 1);
+            // Renombrar etiquetas
+            templates.forEach((t, i) => t.label = `Tablero ${i+1}`);
+            updateTemplateList();
+            updateTemplateButtons();
+            showNotification('Plantilla eliminada');
+        });
+    });
+    templateCount.textContent = templates.length;
+    updateTemplateButtons();
 }
 
 function updateTemplateButtons() {
-    const hasTemplate = template !== null;
-    applyTemplateBtn.disabled = !hasTemplate;
-    applyAllBtn.disabled = !hasTemplate;
-}
+    const hasTemplates = templates.length > 0;
+    const isFirstImage = currentIndex === 0;
+    const notFinalized = !templatesFinalized;
 
-// ============================================================
-//  GESTIÓN DE ARCHIVOS Y RECORTE
-// ============================================================
+    // Solo se puede añadir plantillas en la primera imagen y antes de finalizar
+    addTemplateBtn.disabled = !(isFirstImage && notFinalized && cropBox);
+    finishTemplatesBtn.disabled = !(hasTemplates && isFirstImage && notFinalized);
+    applyAllBtn.disabled = !(hasTemplates && templatesFinalized);
 
-let imageItems = [];       // { dataUrl, originalName, page }
-let currentIndex = 0;
-let extractedFromCurrentImage = 0;
-let results = [];
-let processingAll = false; // flag para evitar múltiples clics
-
-// Elementos
-const fileInput = document.getElementById('fileInput');
-const uploadBtn = document.getElementById('uploadBtn');
-const uploadForm = document.getElementById('uploadForm');
-const previewDiv = document.getElementById('preview');
-const pagesInput = document.getElementById('pagesInput');
-const resultDiv = document.getElementById('result');
-const resultContainer = document.getElementById('resultContainer');
-const exportSection = document.getElementById('exportSection');
-const notif = document.getElementById('notification');
-const notifText = document.getElementById('notifText');
-
-// ===== NOTIFICACIÓN =====
-function showNotification(msg) {
-    notifText.textContent = msg;
-    notif.classList.add('show');
-    setTimeout(() => notif.classList.remove('show'), 3000);
-}
-
-// ===== VISTA PREVIA DE ARCHIVOS =====
-fileInput.addEventListener('change', function() {
-    previewDiv.innerHTML = '';
-    const files = this.files;
-    if (!files.length) return;
-    for (const file of files) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        const div = document.createElement('div');
-        div.className = 'preview-item';
-        div.title = file.name;
-        if (ext === 'pdf') {
-            div.textContent = '📄';
-        } else if (file.type.startsWith('image/')) {
-            const url = URL.createObjectURL(file);
-            const img = document.createElement('img');
-            img.src = url;
-            div.appendChild(img);
-        } else {
-            div.textContent = '📎';
-        }
-        previewDiv.appendChild(div);
+    // Si estamos en la primera imagen y no hay plantillas finalizadas, mostrar modo selección
+    if (isFirstImage && !templatesFinalized) {
+        statusBar.innerHTML = '📐 Modo: Selección de plantillas - Ajusta el recuadro y añade cada tablero';
+        statusBar.style.background = '#e8f5e9';
+        statusBar.style.color = '#2e7d32';
+    } else if (templatesFinalized && hasTemplates) {
+        statusBar.innerHTML = `✅ ${templates.length} plantillas guardadas. Puedes procesar las imágenes.`;
+        statusBar.style.background = '#e3f2fd';
+        statusBar.style.color = '#0d47a1';
+    } else {
+        statusBar.innerHTML = '📐 Modo: Visualización';
+        statusBar.style.background = '#f5f5f5';
+        statusBar.style.color = '#616161';
     }
-    uploadBtn.disabled = false;
+}
+
+// ===== AÑADIR PLANTILLA =====
+addTemplateBtn.addEventListener('click', function() {
+    if (currentIndex !== 0) {
+        showNotification('❌ Solo puedes añadir plantillas en la primera imagen');
+        return;
+    }
+    if (templatesFinalized) {
+        showNotification('❌ Ya finalizaste las plantillas');
+        return;
+    }
+    const t = getTemplateFromCrop();
+    if (!t) {
+        showNotification('❌ No se pudo guardar la plantilla');
+        return;
+    }
+    const label = `Tablero ${templates.length + 1}`;
+    templates.push({ ...t, label });
+    updateTemplateList();
+    // Resetear recuadro al centro para la siguiente selección
+    resetCropToCenter();
+    showNotification(`✅ Plantilla ${templates.length} guardada`);
+    updateTemplateButtons();
 });
 
-// ===== SUBIR ARCHIVOS Y PREPARAR RECORTE =====
+// ===== FINALIZAR PLANTILLAS =====
+finishTemplatesBtn.addEventListener('click', function() {
+    if (templates.length === 0) {
+        showNotification('❌ No hay plantillas para finalizar');
+        return;
+    }
+    if (currentIndex !== 0) {
+        showNotification('❌ Solo puedes finalizar plantillas en la primera imagen');
+        return;
+    }
+    templatesFinalized = true;
+    updateTemplateButtons();
+    showNotification(`✅ ${templates.length} plantillas finalizadas. Ahora puedes procesar las imágenes.`);
+    // Habilitar el botón de aplicar todas
+    applyAllBtn.disabled = false;
+});
+
+// ===== LIMPIAR PLANTILLAS =====
+clearTemplatesBtn.addEventListener('click', function() {
+    if (templates.length === 0) return;
+    if (!confirm('¿Eliminar todas las plantillas?')) return;
+    templates = [];
+    templatesFinalized = false;
+    updateTemplateList();
+    updateTemplateButtons();
+    showNotification('Plantillas eliminadas');
+});
+
+// ============================================================
+//  APLICAR PLANTILLAS A UNA IMAGEN
+// ============================================================
+
+async function applyTemplatesToImage(imageDataUrl, originalName, page) {
+    const img = new Image();
+    await new Promise((resolve) => {
+        img.onload = resolve;
+        img.src = imageDataUrl;
+    });
+    const origW = img.width;
+    const origH = img.height;
+    const resultsList = [];
+    for (const t of templates) {
+        const cropOrigX = t.x * origW;
+        const cropOrigY = t.y * origH;
+        const cropOrigW = t.w * origW;
+        const cropOrigH = t.h * origH;
+        const canvas = document.createElement('canvas');
+        const outW = Math.round(cropOrigW);
+        const outH = Math.round(cropOrigH);
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
+        const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        try {
+            const response = await fetch('/process-cropped', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image: croppedDataUrl,
+                    originalName: originalName,
+                    page: page
+                })
+            });
+            const data = await response.json();
+            if (data.success && data.result) {
+                resultsList.push(data.result);
+            }
+        } catch (err) {
+            console.error('Error procesando:', err);
+        }
+    }
+    return resultsList;
+}
+
+// ============================================================
+//  APLICAR Y PROCESAR TODAS LAS IMÁGENES
+// ============================================================
+
+applyAllBtn.addEventListener('click', async function() {
+    if (templates.length === 0) {
+        showNotification('❌ No hay plantillas guardadas');
+        return;
+    }
+    if (!templatesFinalized) {
+        showNotification('❌ Primero finaliza las plantillas');
+        return;
+    }
+    if (processingAll) return;
+    processingAll = true;
+    applyAllBtn.disabled = true;
+    applyAllBtn.textContent = '⏳ Procesando...';
+
+    let totalProcessed = 0;
+    let totalErrors = 0;
+
+    // Procesar todas las imágenes desde la actual hasta el final
+    for (let i = currentIndex; i < imageItems.length; i++) {
+        const item = imageItems[i];
+        const imgResults = await applyTemplatesToImage(item.dataUrl, item.originalName, item.page);
+        for (const r of imgResults) {
+            if (r) {
+                results.push(r);
+                totalProcessed++;
+            } else {
+                totalErrors++;
+            }
+        }
+        // Actualizar progreso cada 2 imágenes (para no saturar la UI)
+        if (i % 2 === 0 || i === imageItems.length - 1) {
+            applyAllBtn.textContent = `⏳ Procesando ${i+1}/${imageItems.length}...`;
+        }
+    }
+
+    processingAll = false;
+    applyAllBtn.disabled = false;
+    applyAllBtn.innerHTML = '<i class="fas fa-bolt"></i> Aplicar y procesar todas';
+    showNotification(`✅ Procesadas ${totalProcessed} plantillas. Errores: ${totalErrors}`);
+
+    if (results.length > 0) {
+        showResults();
+        cropSection.classList.add('hidden');
+    } else {
+        showNotification('No se obtuvo ningún resultado.');
+    }
+});
+
+// ============================================================
+//  GESTIÓN DE IMÁGENES
+// ============================================================
+
+function showCropItem(index) {
+    if (index < 0 || index >= imageItems.length) {
+        cropSection.classList.add('hidden');
+        if (results.length > 0) showResults();
+        return;
+    }
+
+    const item = imageItems[index];
+    cropCounter.textContent = `Imagen ${index+1} de ${imageItems.length}`;
+
+    originalImage = new Image();
+    originalImage.onload = function() {
+        const canvas = scaleImageToMaxWidth(originalImage, MAX_DISPLAY_WIDTH);
+        cropImage.src = canvas.toDataURL('image/jpeg');
+        cropImage.onload = function() {
+            setTimeout(initCropBox, 50);
+        };
+        if (cropImage.complete) setTimeout(initCropBox, 50);
+    };
+    originalImage.src = item.dataUrl;
+
+    cropPrevBtn.disabled = (index === 0);
+    cropNextBtn.disabled = (index === imageItems.length - 1);
+    updateTemplateButtons();
+}
+
+// ===== SUBIR ARCHIVOS =====
 uploadForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     const files = fileInput.files;
@@ -707,12 +965,12 @@ uploadForm.addEventListener('submit', async function(e) {
     uploadBtn.textContent = '⏳ Procesando...';
     imageItems = [];
     results = [];
-    extractedFromCurrentImage = 0;
     currentIndex = 0;
-    template = null;  // Reiniciar plantilla
-    updateTemplateButtons();
+    templates = [];
+    templatesFinalized = false;
     resultContainer.classList.add('hidden');
     exportSection.style.display = 'none';
+    updateTemplateList();
 
     try {
         const pagesStr = pagesInput.value.trim() || '1';
@@ -764,15 +1022,16 @@ uploadForm.addEventListener('submit', async function(e) {
             return;
         }
 
-        // Mostrar sección de recorte
         cropSection.classList.remove('hidden');
-        extractedFromCurrentImage = 0;
         currentIndex = 0;
+        templatesFinalized = false;
+        templates = [];
+        updateTemplateList();
         showCropItem(currentIndex);
 
         uploadBtn.disabled = false;
         uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
-        showNotification(`✅ ${imageItems.length} imágenes listas para recortar.`);
+        showNotification(`✅ ${imageItems.length} imágenes cargadas. Selecciona los tableros en la primera página.`);
 
     } catch (error) {
         showNotification('❌ Error: ' + error.message);
@@ -781,40 +1040,7 @@ uploadForm.addEventListener('submit', async function(e) {
     }
 });
 
-// ===== MOSTRAR IMAGEN EN RECORTE =====
-function showCropItem(index) {
-    if (index < 0 || index >= imageItems.length) {
-        cropSection.classList.add('hidden');
-        if (results.length > 0) showResults();
-        return;
-    }
-
-    const item = imageItems[index];
-    cropCounter.textContent = `Imagen ${index+1} de ${imageItems.length}`;
-    extractedFromCurrentImage = 0;
-    updateExtractedCount();
-
-    originalImage = new Image();
-    originalImage.onload = function() {
-        const canvas = scaleImageToMaxWidth(originalImage, MAX_DISPLAY_WIDTH);
-        cropImage.src = canvas.toDataURL('image/jpeg');
-        cropImage.onload = function() {
-            setTimeout(initCropBox, 50);
-        };
-        if (cropImage.complete) setTimeout(initCropBox, 50);
-    };
-    originalImage.src = item.dataUrl;
-
-    cropPrevBtn.disabled = (index === 0);
-    cropNextBtn.disabled = (index === imageItems.length - 1);
-    cropConfirmBtn.disabled = true;
-}
-
-function updateExtractedCount() {
-    extractedCountSpan.textContent = `📌 Extraídos de esta imagen: ${extractedFromCurrentImage}`;
-}
-
-// ===== NAVEGAR ENTRE IMÁGENES =====
+// ===== NAVEGACIÓN =====
 cropPrevBtn.addEventListener('click', function() {
     if (currentIndex > 0) {
         currentIndex--;
@@ -833,7 +1059,6 @@ cropNextBtn.addEventListener('click', function() {
     }
 });
 
-// ===== SALTAR IMAGEN =====
 cropSkipBtn.addEventListener('click', function() {
     if (currentIndex < imageItems.length - 1) {
         currentIndex++;
@@ -843,158 +1068,6 @@ cropSkipBtn.addEventListener('click', function() {
         cropSection.classList.add('hidden');
         if (results.length > 0) showResults();
         else showNotification('No se extrajo ningún tablero.');
-    }
-});
-
-// ===== CONFIRMAR RECORTE Y PROCESAR =====
-cropConfirmBtn.addEventListener('click', async function() {
-    const dataUrl = getCroppedDataURL();
-    if (!dataUrl) {
-        showNotification('❌ Error al recortar la imagen');
-        return;
-    }
-
-    cropConfirmBtn.disabled = true;
-    cropConfirmBtn.textContent = '⏳ Procesando...';
-
-    try {
-        const response = await fetch('/process-cropped', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                image: dataUrl,
-                originalName: imageItems[currentIndex].originalName,
-                page: imageItems[currentIndex].page
-            })
-        });
-
-        const data = await response.json();
-        if (data.success && data.result) {
-            results.push(data.result);
-            extractedFromCurrentImage++;
-            updateExtractedCount();
-            showNotification('✅ Tablero guardado correctamente');
-        } else {
-            showNotification('❌ Error: ' + (data.error || 'No se pudo obtener FEN'));
-        }
-
-    } catch (error) {
-        showNotification('❌ Error de red: ' + error.message);
-    }
-
-    cropConfirmBtn.disabled = false;
-    cropConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Recortar y guardar';
-});
-
-// ============================================================
-//  FUNCIONES DE PLANTILLA
-// ============================================================
-
-// Guardar plantilla
-saveTemplateBtn.addEventListener('click', function() {
-    const t = getTemplateFromCrop();
-    if (!t) {
-        showNotification('❌ No se pudo guardar la plantilla');
-        return;
-    }
-    template = t;
-    updateTemplateButtons();
-    showNotification('✅ Plantilla guardada');
-});
-
-// Aplicar plantilla a la imagen actual
-applyTemplateBtn.addEventListener('click', function() {
-    if (!template) {
-        showNotification('❌ No hay plantilla guardada');
-        return;
-    }
-    applyTemplate();
-    showNotification('✅ Plantilla aplicada');
-});
-
-// Aplicar plantilla y procesar todas las imágenes restantes
-applyAllBtn.addEventListener('click', async function() {
-    if (!template) {
-        showNotification('❌ No hay plantilla guardada');
-        return;
-    }
-    if (processingAll) return;
-    processingAll = true;
-    applyAllBtn.disabled = true;
-    applyAllBtn.textContent = '⏳ Procesando...';
-
-    // Recorremos todas las imágenes desde la actual hasta el final
-    let processed = 0;
-    let errors = 0;
-
-    for (let i = currentIndex; i < imageItems.length; i++) {
-        // Mostrar la imagen en el recuadro (opcional)
-        // Pero no es necesario porque el procesamiento es en segundo plano.
-        // Vamos a recortar y procesar cada una.
-        // Primero cargamos la imagen original
-        const item = imageItems[i];
-        const img = new Image();
-        const dataUrl = item.dataUrl;
-        // Cargar la imagen para obtener sus dimensiones
-        await new Promise((resolve) => {
-            img.onload = resolve;
-            img.src = dataUrl;
-        });
-
-        // Calcular el recorte usando la plantilla (en píxeles de la imagen original)
-        const origW = img.width;
-        const origH = img.height;
-        const cropOrigX = template.x * origW;
-        const cropOrigY = template.y * origH;
-        const cropOrigW = template.w * origW;
-        const cropOrigH = template.h * origH;
-
-        // Dibujar el recorte en un canvas
-        const canvas = document.createElement('canvas');
-        const outW = Math.round(cropOrigW);
-        const outH = Math.round(cropOrigH);
-        canvas.width = outW;
-        canvas.height = outH;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
-        const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-        // Enviar a procesar
-        try {
-            const response = await fetch('/process-cropped', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image: croppedDataUrl,
-                    originalName: item.originalName,
-                    page: item.page
-                })
-            });
-            const data = await response.json();
-            if (data.success && data.result) {
-                results.push(data.result);
-                processed++;
-            } else {
-                errors++;
-            }
-        } catch (err) {
-            errors++;
-        }
-    }
-
-    // Terminamos
-    processingAll = false;
-    applyAllBtn.disabled = false;
-    applyAllBtn.innerHTML = '<i class="fas fa-bolt"></i> Aplicar y procesar todas';
-    showNotification(`✅ Procesadas ${processed} imágenes. Errores: ${errors}`);
-
-    // Mostrar resultados
-    if (results.length > 0) {
-        showResults();
-        // Ocultar sección de recorte porque ya hemos terminado
-        cropSection.classList.add('hidden');
-    } else {
-        showNotification('No se obtuvo ningún resultado.');
     }
 });
 
@@ -1011,7 +1084,6 @@ function showResults() {
         return;
     }
 
-    // Filtrar duplicados (FEN únicos)
     const unique = [];
     const seen = new Set();
     for (const item of results) {
@@ -1065,12 +1137,10 @@ function showResults() {
     html += `<div class="stats">Total FEN únicos: ${unique.filter(r => r.fen).length} | Errores: ${unique.filter(r => !r.fen).length}</div>`;
     resultDiv.innerHTML = html;
 
-    // Exportar sección
     if (unique.some(r => r.fen)) {
         exportSection.style.display = 'block';
     }
 
-    // Eventos de la tabla
     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
@@ -1108,7 +1178,10 @@ function showResults() {
     });
 }
 
-// ===== DESCARGAR PGN =====
+// ============================================================
+//  DESCARGAR PGN
+// ============================================================
+
 document.getElementById('downloadPgnBtn').addEventListener('click', async function() {
     const rows = document.querySelectorAll('#result table tbody tr');
     const fens = [];
@@ -1151,6 +1224,38 @@ document.getElementById('downloadPgnBtn').addEventListener('click', async functi
     } catch (error) {
         showNotification('❌ Error de red: ' + error.message);
     }
+});
+
+// ===== NOTIFICACIÓN =====
+function showNotification(msg) {
+    notifText.textContent = msg;
+    notif.classList.add('show');
+    setTimeout(() => notif.classList.remove('show'), 3000);
+}
+
+// ===== VISTA PREVIA =====
+fileInput.addEventListener('change', function() {
+    previewDiv.innerHTML = '';
+    const files = this.files;
+    if (!files.length) return;
+    for (const file of files) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const div = document.createElement('div');
+        div.className = 'preview-item';
+        div.title = file.name;
+        if (ext === 'pdf') {
+            div.textContent = '📄';
+        } else if (file.type.startsWith('image/')) {
+            const url = URL.createObjectURL(file);
+            const img = document.createElement('img');
+            img.src = url;
+            div.appendChild(img);
+        } else {
+            div.textContent = '📎';
+        }
+        previewDiv.appendChild(div);
+    }
+    uploadBtn.disabled = false;
 });
 </script>
 </body>
