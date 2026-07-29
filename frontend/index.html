@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Con Recorte Manual</title>
+    <title>Chess PDF to FEN - Recorte múltiple</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ===== ESTILOS GENERALES (igual que antes) ===== */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -40,6 +39,7 @@
             align-items: center;
             gap: 10px;
             margin-bottom: 15px;
+            flex-wrap: wrap;
         }
         .card-header i { color: #3498db; }
         .btn {
@@ -113,7 +113,7 @@
         }
         .preview-item img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* ===== CONTENEDOR DE RECORTE (igual que el proyecto anterior) ===== */
+        /* ===== CONTENEDOR DE RECORTE ===== */
         #cropContainer {
             position: relative;
             border: 1px solid #ddd;
@@ -175,6 +175,12 @@
             justify-content: center;
         }
         .crop-controls .btn { flex: 1 1 120px; min-width: 100px; }
+        .extracted-count {
+            text-align: center;
+            font-weight: 600;
+            color: #27ae60;
+            margin: 8px 0;
+        }
 
         /* ===== TABLA DE RESULTADOS ===== */
         #result { margin-top: 20px; overflow-x: auto; }
@@ -252,7 +258,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Sube imágenes o PDFs y recorta manualmente cada tablero para obtener su FEN.</p>
+    <p class="subtitle">Sube imágenes o PDFs y recorta manualmente cada tablero. Puedes extraer múltiples ejercicios de una misma página.</p>
 
     <!-- ===== PASO 1: SUBIR ARCHIVOS ===== -->
     <div class="card">
@@ -261,19 +267,23 @@
             <form id="uploadForm">
                 <input type="file" id="fileInput" name="files" accept="image/*, application/pdf" multiple required>
                 <div style="margin:10px 0;">
-                    <label for="pages">Páginas (PDF, separadas por comas):</label>
+                    <label for="pagesInput">Páginas (PDF, separadas por comas):</label>
                     <input type="text" id="pagesInput" placeholder="ej: 1,3,5" value="1" style="width:200px;padding:6px;border:1px solid #ccc;border-radius:4px;">
                 </div>
-                <button type="submit" class="btn" id="uploadBtn"><i class="fas fa-images"></i> Cargar y procesar</button>
+                <button type="submit" class="btn" id="uploadBtn"><i class="fas fa-images"></i> Cargar y extraer páginas</button>
             </form>
             <div id="preview" class="preview-grid"></div>
         </div>
     </div>
 
-    <!-- ===== PASO 2: RECORTE MANUAL ===== -->
+    <!-- ===== PASO 2: RECORTE MANUAL (MÚLTIPLE POR IMAGEN) ===== -->
     <div class="card hidden" id="cropSection">
-        <div class="card-header"><i class="fas fa-crop-alt"></i> Paso 2: Seleccionar tablero</div>
-        <div class="image-counter" id="cropCounter">Imagen 1 de 1</div>
+        <div class="card-header">
+            <i class="fas fa-crop-alt"></i>
+            <span>Paso 2: Seleccionar tableros</span>
+            <span class="badge" id="imageProgress">Imagen 1 de 1</span>
+        </div>
+        <div class="extracted-count" id="extractedCount">📌 Extraídos de esta imagen: 0</div>
         <div id="cropContainer">
             <img id="cropImage" />
             <div class="crop-box hidden">
@@ -285,10 +295,13 @@
         </div>
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
-            <button class="btn btn-success" id="cropConfirmBtn" disabled><i class="fas fa-check"></i> Recortar y procesar</button>
-            <button class="btn" id="cropNextBtn" disabled>Siguiente <i class="fas fa-chevron-right"></i></button>
-            <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar imagen</button>
+            <button class="btn btn-success" id="cropConfirmBtn" disabled><i class="fas fa-check"></i> Recortar y guardar</button>
+            <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar esta imagen</button>
+            <button class="btn btn-primary" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
+        <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
+            💡 Después de recortar un tablero, la imagen permanece para que puedas recortar el siguiente.
+        </p>
     </div>
 
     <!-- ===== RESULTADOS ===== -->
@@ -327,7 +340,7 @@
 
 <script>
 // ============================================================
-//  SISTEMA DE RECORTE MANUAL (igual que el proyecto anterior)
+//  SISTEMA DE RECORTE MANUAL (múltiple por imagen)
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
@@ -344,11 +357,12 @@ let startCropX, startCropY, startCropW, startCropH;
 const cropSection = document.getElementById('cropSection');
 const cropImage = document.getElementById('cropImage');
 const cropContainer = document.getElementById('cropContainer');
-const cropCounter = document.getElementById('cropCounter');
+const cropCounter = document.getElementById('imageProgress');
 const cropConfirmBtn = document.getElementById('cropConfirmBtn');
 const cropPrevBtn = document.getElementById('cropPrevBtn');
 const cropNextBtn = document.getElementById('cropNextBtn');
 const cropSkipBtn = document.getElementById('cropSkipBtn');
+const extractedCountSpan = document.getElementById('extractedCount');
 
 // ===== FUNCIONES DE RECORTE =====
 function getPointerPosition(e) {
@@ -563,9 +577,9 @@ function scaleImageToMaxWidth(img, maxWidth) {
 // ============================================================
 
 let imageItems = [];       // { dataUrl, originalName, page }
-let currentCropIndex = 0;
+let currentIndex = 0;
+let extractedFromCurrentImage = 0;  // contador de recortes en la imagen actual
 let results = [];
-let processedCount = 0;
 
 // Elementos
 const fileInput = document.getElementById('fileInput');
@@ -622,10 +636,12 @@ uploadForm.addEventListener('submit', async function(e) {
 
     uploadBtn.disabled = true;
     uploadBtn.textContent = '⏳ Procesando...';
-
     imageItems = [];
     results = [];
-    processedCount = 0;
+    extractedFromCurrentImage = 0;
+    currentIndex = 0;
+    resultContainer.classList.add('hidden');
+    exportSection.style.display = 'none';
 
     try {
         const pagesStr = pagesInput.value.trim() || '1';
@@ -636,7 +652,6 @@ uploadForm.addEventListener('submit', async function(e) {
             const bytes = await file.arrayBuffer();
 
             if (ext === 'pdf') {
-                // Enviamos al backend para extraer páginas como imágenes
                 const formData = new FormData();
                 formData.append('files', file);
                 formData.append('pages', pagesStr);
@@ -674,23 +689,24 @@ uploadForm.addEventListener('submit', async function(e) {
         if (imageItems.length === 0) {
             showNotification('No se encontraron imágenes para recortar.');
             uploadBtn.disabled = false;
-            uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y procesar';
+            uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
             return;
         }
 
         // Mostrar sección de recorte
         cropSection.classList.remove('hidden');
-        currentCropIndex = 0;
-        showCropItem(currentCropIndex);
+        extractedFromCurrentImage = 0;
+        currentIndex = 0;
+        showCropItem(currentIndex);
 
         uploadBtn.disabled = false;
-        uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y procesar';
+        uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
         showNotification(`✅ ${imageItems.length} imágenes listas para recortar.`);
 
     } catch (error) {
         showNotification('❌ Error: ' + error.message);
         uploadBtn.disabled = false;
-        uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y procesar';
+        uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
     }
 });
 
@@ -704,6 +720,8 @@ function showCropItem(index) {
 
     const item = imageItems[index];
     cropCounter.textContent = `Imagen ${index+1} de ${imageItems.length}`;
+    extractedFromCurrentImage = 0;
+    updateExtractedCount();
 
     originalImage = new Image();
     originalImage.onload = function() {
@@ -721,34 +739,45 @@ function showCropItem(index) {
     cropConfirmBtn.disabled = true;
 }
 
+function updateExtractedCount() {
+    extractedCountSpan.textContent = `📌 Extraídos de esta imagen: ${extractedFromCurrentImage}`;
+}
+
 // ===== NAVEGAR ENTRE IMÁGENES =====
 cropPrevBtn.addEventListener('click', function() {
-    if (currentCropIndex > 0) {
-        currentCropIndex--;
-        showCropItem(currentCropIndex);
+    if (currentIndex > 0) {
+        currentIndex--;
+        showCropItem(currentIndex);
     }
 });
 
 cropNextBtn.addEventListener('click', function() {
-    if (currentCropIndex < imageItems.length - 1) {
-        currentCropIndex++;
-        showCropItem(currentCropIndex);
+    if (currentIndex < imageItems.length - 1) {
+        // Al avanzar, se reinicia el contador para la nueva imagen
+        currentIndex++;
+        showCropItem(currentIndex);
+    } else {
+        // Si es la última, cerrar sección y mostrar resultados
+        cropSection.classList.add('hidden');
+        if (results.length > 0) showResults();
+        else showNotification('No se extrajo ningún tablero.');
     }
 });
 
 // ===== SALTAR IMAGEN =====
 cropSkipBtn.addEventListener('click', function() {
-    if (currentCropIndex < imageItems.length - 1) {
-        currentCropIndex++;
-        showCropItem(currentCropIndex);
+    if (currentIndex < imageItems.length - 1) {
+        currentIndex++;
+        showCropItem(currentIndex);
+        showNotification('⏭️ Imagen saltada');
     } else {
         cropSection.classList.add('hidden');
         if (results.length > 0) showResults();
+        else showNotification('No se extrajo ningún tablero.');
     }
-    showNotification('⏭️ Imagen saltada');
 });
 
-// ===== CONFIRMAR RECORTE Y PROCESAR =====
+// ===== CONFIRMAR RECORTE Y PROCESAR (NO AVANZA DE IMAGEN) =====
 cropConfirmBtn.addEventListener('click', async function() {
     const dataUrl = getCroppedDataURL();
     if (!dataUrl) {
@@ -760,42 +789,37 @@ cropConfirmBtn.addEventListener('click', async function() {
     cropConfirmBtn.textContent = '⏳ Procesando...';
 
     try {
-        // Enviar recorte al servidor
         const response = await fetch('/process-cropped', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 image: dataUrl,
-                originalName: imageItems[currentCropIndex].originalName,
-                page: imageItems[currentCropIndex].page
+                originalName: imageItems[currentIndex].originalName,
+                page: imageItems[currentIndex].page
             })
         });
 
         const data = await response.json();
         if (data.success && data.result) {
             results.push(data.result);
-            showNotification('✅ Tablero procesado correctamente');
+            extractedFromCurrentImage++;
+            updateExtractedCount();
+            showNotification('✅ Tablero guardado correctamente');
         } else {
             showNotification('❌ Error: ' + (data.error || 'No se pudo obtener FEN'));
-            // Aún así avanzamos
         }
 
-        // Avanzar a la siguiente imagen
-        if (currentCropIndex < imageItems.length - 1) {
-            currentCropIndex++;
-            showCropItem(currentCropIndex);
-        } else {
-            cropSection.classList.add('hidden');
-            if (results.length > 0) showResults();
-            else showNotification('No se obtuvieron resultados');
-        }
+        // La imagen permanece para seguir recortando más tableros
+        // Reiniciamos el recuadro a la posición inicial (opcional, puede ser útil)
+        // O podemos mantener el último recuadro para ajustarlo.
+        // Para mejor experiencia, dejamos el recuadro donde estaba.
 
     } catch (error) {
         showNotification('❌ Error de red: ' + error.message);
     }
 
     cropConfirmBtn.disabled = false;
-    cropConfirmBtn.textContent = '<i class="fas fa-check"></i> Recortar y procesar';
+    cropConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Recortar y guardar';
 });
 
 // ===== MOSTRAR RESULTADOS =====
@@ -816,7 +840,7 @@ function showResults() {
             seen.add(item.fen);
             unique.push(item);
         } else if (!item.fen) {
-            unique.push(item); // errores también se muestran
+            unique.push(item);
         }
     }
 
