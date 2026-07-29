@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Múltiples tableros por página</title>
+    <title>Chess PDF to FEN - Múltiples tableros</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ===== ESTILOS (idénticos a la versión anterior, solo añadimos modal) ===== */
+        /* ===== ESTILOS (idénticos a la versión anterior) ===== */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -162,9 +162,7 @@
             pointer-events: none;
             white-space: nowrap;
         }
-        .crop-box.active .crop-label {
-            background: #9b59b6;
-        }
+        .crop-box.active .crop-label { background: #9b59b6; }
         .crop-box .crop-close {
             position: absolute;
             top: -22px;
@@ -285,7 +283,7 @@
         }
         .editing-badge { background: #9b59b6; }
 
-        /* ===== MODAL PARA VER RECORTE ===== */
+        /* ===== MODAL ===== */
         .modal {
             position: fixed;
             top: 0; left: 0;
@@ -308,12 +306,7 @@
             position: relative;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
-        .modal-content img {
-            max-width: 100%;
-            max-height: 80vh;
-            display: block;
-            margin: 0 auto;
-        }
+        .modal-content img { max-width: 100%; max-height: 80vh; display: block; margin: 0 auto; }
         .modal-close {
             position: absolute;
             top: 10px; right: 15px;
@@ -345,7 +338,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Extrae múltiples tableros por página (hasta 60 tableros en total).</p>
+    <p class="subtitle">Extrae múltiples tableros por página (hasta 60 tableros en total). Arrastra y redimensiona los recuadros.</p>
 
     <!-- PASO 1 -->
     <div class="card">
@@ -371,9 +364,7 @@
             <span class="badge" id="imageProgress">Imagen 1 de 1</span>
             <span class="badge editing-badge hidden" id="editingBadge">✏️ Editando</span>
         </div>
-        <div class="status-bar" id="statusBar">
-            🎯 Añade recuadros para cada tablero en la primera página.
-        </div>
+        <div class="status-bar" id="statusBar">🎯 Añade recuadros para cada tablero en la primera página.</div>
         <div class="template-controls">
             <button class="btn btn-success btn-sm" id="addBoxBtn"><i class="fas fa-plus"></i> Añadir recuadro</button>
             <button class="btn btn-danger btn-sm" id="delBoxBtn" disabled><i class="fas fa-minus-circle"></i> Eliminar activo</button>
@@ -392,7 +383,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Ajusta cada recuadro al tablero. Guarda plantillas y procesa el resto de páginas.
+            💡 Ajusta cada recuadro arrastrando o usando los tiradores. Guarda plantillas y procesa el resto.
         </p>
     </div>
 
@@ -407,7 +398,7 @@
     <!-- EXPORTACIÓN -->
     <div class="export-section" id="exportSection">
         <h4><i class="fas fa-file-export"></i> Exportar a Lichess</h4>
-        <p>Descarga un archivo PGN con todos los FEN (hasta 64).</p>
+        <p>Descarga un archivo PGN con todos los FEN.</p>
         <div class="field-group">
             <label for="studyNameInput">Nombre del estudio:</label>
             <input type="text" id="studyNameInput" placeholder="Mi Estudio de Ajedrez" value="Mi Estudio de Ajedrez">
@@ -421,13 +412,13 @@
             1. Ve a <a href="https://lichess.org/study" target="_blank">https://lichess.org/study</a> y crea un nuevo estudio.<br>
             2. Haz clic en <strong>"Añadir capítulo"</strong> → pestaña <strong>"PGN"</strong>.<br>
             3. Arrastra o pega el contenido del archivo PGN descargado.<br>
-            4. Haz clic en <strong>"Importar"</strong>. ¡Todos los capítulos se crearán automáticamente!
+            4. Haz clic en <strong>"Importar"</strong>.
         </div>
         <button class="btn btn-export" id="downloadPgnBtn"><i class="fas fa-download"></i> Descargar PGN</button>
     </div>
 </div>
 
-<!-- ===== MODAL PARA VER RECORTE ===== -->
+<!-- MODAL -->
 <div class="modal" id="cropModal">
     <div class="modal-content">
         <button class="modal-close" id="modalClose">&times;</button>
@@ -441,12 +432,12 @@
 
 <script>
 // ============================================================
-//  SISTEMA COMPLETO – MÚLTIPLES TABLEROS POR PÁGINA
+//  SISTEMA COMPLETO CON ARRASTRE FUNCIONAL
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
 
-// Estado
+// --- Estado ---
 let originalImage = null;
 let cropBoxes = [];
 let activeBoxIndex = -1;
@@ -457,9 +448,9 @@ let savedTemplates = [];
 let templatesSaved = false;
 let processingAll = false;
 let editingMode = false;
-let editingPageIndex = -1;    // índice de la imagen que se está editando
+let editingPageIndex = -1;
 
-// DOM
+// --- DOM ---
 const cropSection = document.getElementById('cropSection');
 const cropImage = document.getElementById('cropImage');
 const cropContainer = document.getElementById('cropContainer');
@@ -540,8 +531,12 @@ function getDisplaySize() {
 }
 
 // ============================================================
-//  GESTIÓN DE RECUADROS (sin cambios)
+//  GESTIÓN DE RECUADROS CON ARRASTRE Y REDIMENSIÓN
 // ============================================================
+
+// --- Variables de arrastre ---
+let dragData = null;
+
 function createBoxElement(x, y, w, h, label) {
     const box = document.createElement('div');
     box.className = 'crop-box';
@@ -551,11 +546,13 @@ function createBoxElement(x, y, w, h, label) {
     box.style.height = h + 'px';
     box.dataset.index = cropBoxes.length;
 
+    // Etiqueta
     const lbl = document.createElement('span');
     lbl.className = 'crop-label';
     lbl.textContent = label || `#${cropBoxes.length+1}`;
     box.appendChild(lbl);
 
+    // Botón cerrar
     const close = document.createElement('span');
     close.className = 'crop-close';
     close.textContent = '✕';
@@ -568,6 +565,7 @@ function createBoxElement(x, y, w, h, label) {
     });
     box.appendChild(close);
 
+    // Tiradores
     const dirs = ['nw', 'ne', 'sw', 'se'];
     dirs.forEach(d => {
         const handle = document.createElement('div');
@@ -575,28 +573,29 @@ function createBoxElement(x, y, w, h, label) {
         box.appendChild(handle);
     });
 
+    // --- EVENTOS DE ARRASTRE (ratón y táctil) ---
     box.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('resize-handle') || e.target.classList.contains('crop-close')) return;
         activateBox(box);
-        startDragBox(e, box);
+        startDrag(e, box);
     });
     box.addEventListener('touchstart', (e) => {
         if (e.target.classList.contains('resize-handle') || e.target.classList.contains('crop-close')) return;
         activateBox(box);
-        startDragBoxTouch(e, box);
+        startDragTouch(e, box);
     }, { passive: false });
 
     box.querySelectorAll('.resize-handle').forEach(h => {
         h.addEventListener('mousedown', (e) => {
             e.stopPropagation();
             activateBox(box);
-            startResizeBox(e, box, h.className.split(' ')[1].replace('resize-', ''));
+            startResize(e, box, h.className.split(' ')[1].replace('resize-', ''));
         });
         h.addEventListener('touchstart', (e) => {
             e.stopPropagation();
             e.preventDefault();
             activateBox(box);
-            startResizeBoxTouch(e, box, h.className.split(' ')[1].replace('resize-', ''));
+            startResizeTouch(e, box, h.className.split(' ')[1].replace('resize-', ''));
         }, { passive: false });
     });
 
@@ -674,7 +673,7 @@ function updateUI() {
     applyAllBtn.disabled = !hasSaved;
     cropConfirmBtn.disabled = !hasBoxes;
     statusBar.textContent = hasBoxes ?
-        `🎯 ${cropBoxes.length} recuadros activos. Ajusta cada uno al tablero correspondiente.` :
+        `🎯 ${cropBoxes.length} recuadros activos. Arrastra o redimensiona.` :
         '🎯 Haz clic en "Añadir recuadro" para cada tablero.';
     if (!hasBoxes) delBoxBtn.disabled = true;
     if (editingMode) {
@@ -687,11 +686,10 @@ function updateUI() {
 }
 
 // ============================================================
-//  ARRASTRE Y REDIMENSIÓN (sin cambios)
+//  FUNCIONES DE ARRASTRE Y REDIMENSIÓN (restauradas)
 // ============================================================
-let dragData = null;
 
-function startDragBox(e, box) {
+function startDrag(e, box) {
     const idx = parseInt(box.dataset.index);
     const data = cropBoxes[idx];
     if (!data) return;
@@ -710,7 +708,7 @@ function startDragBox(e, box) {
     document.addEventListener('mouseup', onDragEnd);
 }
 
-function startDragBoxTouch(e, box) {
+function startDragTouch(e, box) {
     const idx = parseInt(box.dataset.index);
     const data = cropBoxes[idx];
     if (!data) return;
@@ -729,7 +727,7 @@ function startDragBoxTouch(e, box) {
     document.addEventListener('touchend', onDragEndTouch, { passive: false });
 }
 
-function startResizeBox(e, box, dir) {
+function startResize(e, box, dir) {
     const idx = parseInt(box.dataset.index);
     const data = cropBoxes[idx];
     if (!data) return;
@@ -751,7 +749,7 @@ function startResizeBox(e, box, dir) {
     document.addEventListener('mouseup', onDragEnd);
 }
 
-function startResizeBoxTouch(e, box, dir) {
+function startResizeTouch(e, box, dir) {
     const idx = parseInt(box.dataset.index);
     const data = cropBoxes[idx];
     if (!data) return;
@@ -900,8 +898,23 @@ saveTemplatesBtn.addEventListener('click', function() {
 });
 
 // ============================================================
-//  APLICAR PLANTILLAS A UNA IMAGEN (devuelve lista de resultados)
+//  APLICAR PLANTILLAS A UNA IMAGEN
 // ============================================================
+function applySavedTemplatesToCurrentImage() {
+    clearBoxes();
+    const size = getDisplaySize();
+    if (size.w === 0 || size.h === 0) return;
+    for (const t of savedTemplates) {
+        const x = t.x * size.w;
+        const y = t.y * size.h;
+        const w = t.w * size.w;
+        const h = t.h * size.h;
+        addBox(x, y, w, h);
+    }
+    if (cropBoxes.length > 0) activateBox(cropBoxes[0].element);
+    updateUI();
+}
+
 async function applyTemplatesToImage(imageDataUrl, originalName, page) {
     if (savedTemplates.length === 0 || !templatesSaved) return [];
     const img = new Image();
@@ -914,7 +927,7 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
     const resultsList = [];
     for (let idx = 0; idx < savedTemplates.length; idx++) {
         const t = savedTemplates[idx];
-        // Añadir un pequeño margen (5% del ancho/alto) al recorte para mejorar detección
+        // Margen del 5%
         const marginX = t.w * origW * 0.05;
         const marginY = t.h * origH * 0.05;
         const cropOrigX = Math.max(0, t.x * origW - marginX);
@@ -930,7 +943,6 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
         const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        // Guardar la imagen recortada (para mostrarla en caso de fallo)
         try {
             const response = await fetch('/process-cropped', {
                 method: 'POST',
@@ -973,7 +985,7 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
 }
 
 // ============================================================
-//  APLICAR Y PROCESAR TODAS (genera todos los resultados)
+//  PROCESAR TODAS LAS IMÁGENES
 // ============================================================
 applyAllBtn.addEventListener('click', async function() {
     if (savedTemplates.length === 0 || !templatesSaved) {
@@ -985,17 +997,14 @@ applyAllBtn.addEventListener('click', async function() {
     applyAllBtn.disabled = true;
     applyAllBtn.textContent = '⏳ Procesando...';
 
-    // Reiniciar resultados
     allResults = [];
-
-    let totalProcessed = 0;
-    let totalErrors = 0;
+    let totalProcessed = 0, totalErrors = 0;
 
     for (let i = 0; i < imageItems.length; i++) {
         const item = imageItems[i];
         const boardResults = await applyTemplatesToImage(item.dataUrl, item.originalName, item.page);
         for (const r of boardResults) {
-            const resultObj = {
+            allResults.push({
                 page: item.page,
                 originalName: item.originalName,
                 boardIndex: r.boardIndex,
@@ -1003,8 +1012,7 @@ applyAllBtn.addEventListener('click', async function() {
                 thumbnail: r.thumbnail,
                 error: r.error,
                 cropDataURL: r.cropDataURL
-            };
-            allResults.push(resultObj);
+            });
             if (r.fen) totalProcessed++;
             else totalErrors++;
         }
@@ -1017,12 +1025,9 @@ applyAllBtn.addEventListener('click', async function() {
     applyAllBtn.disabled = false;
     applyAllBtn.innerHTML = '<i class="fas fa-bolt"></i> Aplicar y procesar todas';
     showNotification(`✅ ${totalProcessed} éxitos, ${totalErrors} fallos.`);
-
     if (allResults.length > 0) {
         showResults();
         cropSection.classList.add('hidden');
-    } else {
-        showNotification('No se obtuvo ningún resultado.');
     }
 });
 
@@ -1035,7 +1040,6 @@ function showCropItem(index) {
         if (allResults.length > 0) showResults();
         return;
     }
-
     const item = imageItems[index];
     cropCounter.textContent = `Imagen ${index+1} de ${imageItems.length}`;
 
@@ -1044,7 +1048,6 @@ function showCropItem(index) {
         const canvas = scaleImageToMaxWidth(originalImage, MAX_DISPLAY_WIDTH);
         cropImage.src = canvas.toDataURL('image/jpeg');
         cropImage.onload = function() {
-            // Si hay plantillas guardadas, aplicarlas a esta imagen
             if (templatesSaved && savedTemplates.length > 0) {
                 applySavedTemplatesToCurrentImage();
             } else if (index === 0 && cropBoxes.length === 0) {
@@ -1067,30 +1070,14 @@ function showCropItem(index) {
     cropNextBtn.disabled = (index === imageItems.length - 1);
 }
 
-function applySavedTemplatesToCurrentImage() {
-    clearBoxes();
-    const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return;
-    for (const t of savedTemplates) {
-        const x = t.x * size.w;
-        const y = t.y * size.h;
-        const w = t.w * size.w;
-        const h = t.h * size.h;
-        addBox(x, y, w, h);
-    }
-    if (cropBoxes.length > 0) activateBox(cropBoxes[0].element);
-    updateUI();
-}
-
 // ============================================================
-//  GUARDAR RECORTE (usado en modo edición)
+//  GUARDAR RECORTE (edición)
 // ============================================================
 cropConfirmBtn.addEventListener('click', async function() {
     if (cropBoxes.length === 0) {
         showNotification('❌ No hay recuadros para recortar.');
         return;
     }
-    // Tomar el recuadro activo o el primero
     let boxData = cropBoxes.find(b => b.element.classList.contains('active'));
     if (!boxData) boxData = cropBoxes[0];
     if (!boxData) return;
@@ -1100,7 +1087,7 @@ cropConfirmBtn.addEventListener('click', async function() {
     const origY = boxData.y * scaleY;
     const origW = boxData.w * scaleX;
     const origH = boxData.h * scaleY;
-    // Añadir margen del 5%
+    // Margen 5%
     const marginX = origW * 0.05;
     const marginY = origH * 0.05;
     const cropOrigX = Math.max(0, origX - marginX);
@@ -1132,7 +1119,6 @@ cropConfirmBtn.addEventListener('click', async function() {
         });
         const data = await response.json();
         if (data.success && data.result) {
-            // Buscar si ya existe un resultado para esta imagen y este boardIndex
             const existing = allResults.find(r =>
                 r.page === imageItems[currentIndex].page &&
                 r.originalName === imageItems[currentIndex].originalName &&
@@ -1167,7 +1153,6 @@ cropConfirmBtn.addEventListener('click', async function() {
     } catch (error) {
         showNotification('❌ Error de red: ' + error.message);
     }
-
     cropConfirmBtn.disabled = false;
     cropConfirmBtn.innerHTML = '<i class="fas fa-check"></i> Recortar y guardar';
 });
@@ -1182,7 +1167,6 @@ cropPrevBtn.addEventListener('click', function() {
         showCropItem(currentIndex);
     }
 });
-
 cropNextBtn.addEventListener('click', function() {
     if (currentIndex < imageItems.length - 1) {
         currentIndex++;
@@ -1194,7 +1178,6 @@ cropNextBtn.addEventListener('click', function() {
         else showNotification('No se extrajo ningún tablero.');
     }
 });
-
 cropSkipBtn.addEventListener('click', function() {
     if (currentIndex < imageItems.length - 1) {
         currentIndex++;
@@ -1207,7 +1190,6 @@ cropSkipBtn.addEventListener('click', function() {
         else showNotification('No se extrajo ningún tablero.');
     }
 });
-
 cancelEditBtn.addEventListener('click', function() {
     editingMode = false;
     editingBadge.classList.add('hidden');
@@ -1275,7 +1257,6 @@ uploadForm.addEventListener('submit', async function(e) {
                 if (data.success && data.pages) {
                     for (const page of data.pages) {
                         if (page.error) {
-                            // Si falla la extracción, creamos un item con error para mostrarlo
                             imageItems.push({
                                 dataUrl: null,
                                 originalName: file.name,
@@ -1321,7 +1302,6 @@ uploadForm.addEventListener('submit', async function(e) {
         uploadBtn.disabled = false;
         uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
         showNotification(`✅ ${imageItems.length} imágenes cargadas.`);
-
     } catch (error) {
         showNotification('❌ Error: ' + error.message);
         uploadBtn.disabled = false;
@@ -1330,12 +1310,11 @@ uploadForm.addEventListener('submit', async function(e) {
 });
 
 // ============================================================
-//  MOSTRAR RESULTADOS CON BOTÓN "VER RECORTE"
+//  MOSTRAR RESULTADOS
 // ============================================================
 function showResults() {
     resultContainer.classList.remove('hidden');
     resultDiv.innerHTML = '';
-
     if (allResults.length === 0) {
         resultDiv.innerHTML = '<p>No se obtuvieron resultados.</p>';
         return;
@@ -1365,33 +1344,26 @@ function showResults() {
                 ${isError ? `<span class="error-msg"> (${r.error || 'FEN no obtenido'})</span>` : ''}
             </td>
             <td class="board-cell">
-                ${r.thumbnail ? 
-                    `<img src="data:image/jpeg;base64,${r.thumbnail}" class="thumbnail-board" alt="Tablero">` : 
-                    (r.cropDataURL ? '🖼️' : '❌')
-                }
+                ${r.thumbnail ? `<img src="data:image/jpeg;base64,${r.thumbnail}" class="thumbnail-board" alt="Tablero">` :
+                 (r.cropDataURL ? '🖼️' : '❌')}
             </td>
-            <td>
-                ${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}" data-index="${i}">🔄</button>` : '-'}
-            </td>
+            <td>${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}" data-index="${i}">🔄</button>` : '-'}</td>
             <td class="action-cell">
                 ${!isError ? `<button class="btn-copy" data-fen="${fen}" data-index="${i}" title="Copiar FEN">✂️</button>` : ''}
-                <button class="btn btn-warning btn-sm edit-btn" data-index="${i}" title="Editar este tablero">✏️</button>
+                <button class="btn btn-warning btn-sm edit-btn" data-index="${i}" title="Editar">✏️</button>
                 <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte">👁️</button>
             </td>
         </tr>`;
     }
-
     html += '</tbody></table>';
     const totalSuccess = allResults.filter(r => r.fen).length;
     const totalErrors = allResults.filter(r => !r.fen).length;
     html += `<div class="stats">Éxitos: ${totalSuccess} | Fallos: ${totalErrors}</div>`;
     resultDiv.innerHTML = html;
 
-    if (totalSuccess > 0) {
-        exportSection.style.display = 'block';
-    }
+    if (totalSuccess > 0) exportSection.style.display = 'block';
 
-    // Eventos de la tabla
+    // Eventos
     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
@@ -1413,20 +1385,15 @@ function showResults() {
     document.querySelectorAll('.btn-copy').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
-            if (!fen) return;
-            navigator.clipboard.writeText(fen).then(() => {
-                showNotification('FEN copiado');
-            });
+            if (fen) navigator.clipboard.writeText(fen).then(() => showNotification('FEN copiado'));
         });
     });
 
-    // Botón "Editar"
     document.querySelectorAll('.edit-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const idx = parseInt(this.dataset.index);
             if (isNaN(idx) || idx < 0 || idx >= allResults.length) return;
             const result = allResults[idx];
-            // Buscar la página correspondiente en imageItems
             const pageIndex = imageItems.findIndex(item => item.page === result.page && item.originalName === result.originalName);
             if (pageIndex === -1) {
                 showNotification('❌ No se encontró la imagen original.');
@@ -1437,16 +1404,12 @@ function showResults() {
             currentIndex = pageIndex;
             cropSection.classList.remove('hidden');
             showCropItem(pageIndex);
-            // Activar el recuadro correspondiente al boardIndex
             const boardIdx = result.boardIndex;
-            if (cropBoxes.length > boardIdx) {
-                activateBox(cropBoxes[boardIdx].element);
-            }
+            if (cropBoxes.length > boardIdx) activateBox(cropBoxes[boardIdx].element);
             showNotification(`✏️ Editando tablero ${boardIdx+1} de página ${result.page}`);
         });
     });
 
-    // Botón "Ver recorte"
     document.querySelectorAll('.view-crop-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const idx = parseInt(this.dataset.index);
@@ -1466,12 +1429,8 @@ function showResults() {
 // ============================================================
 //  MODAL
 // ============================================================
-modalClose.addEventListener('click', () => {
-    modal.classList.remove('active');
-});
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.remove('active');
-});
+modalClose.addEventListener('click', () => modal.classList.remove('active'));
+modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
 
 // ============================================================
 //  DESCARGAR PGN
@@ -1482,10 +1441,8 @@ document.getElementById('downloadPgnBtn').addEventListener('click', async functi
         showNotification('No hay FEN válidos para exportar.');
         return;
     }
-
     const studyName = document.getElementById('studyNameInput').value.trim() || 'Mi Estudio de Ajedrez';
     const userName = document.getElementById('userNameInput').value.trim() || 'Anónimo';
-
     try {
         const response = await fetch('/export-pgn', {
             method: 'POST',
@@ -1524,16 +1481,13 @@ fileInput.addEventListener('change', function() {
         const div = document.createElement('div');
         div.className = 'preview-item';
         div.title = file.name;
-        if (ext === 'pdf') {
-            div.textContent = '📄';
-        } else if (file.type.startsWith('image/')) {
+        if (ext === 'pdf') div.textContent = '📄';
+        else if (file.type.startsWith('image/')) {
             const url = URL.createObjectURL(file);
             const img = document.createElement('img');
             img.src = url;
             div.appendChild(img);
-        } else {
-            div.textContent = '📎';
-        }
+        } else div.textContent = '📎';
         previewDiv.appendChild(div);
     }
     uploadBtn.disabled = false;
