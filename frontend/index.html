@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Multi-plantilla</title>
+    <title>Chess PDF to FEN - Múltiples recuadros</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,11 +83,6 @@
             font-size: 1rem;
             margin-bottom: 12px;
         }
-        .form-control:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 3px rgba(52,152,219,0.2);
-        }
         .upload-area {
             border: 2px dashed #3498db;
             padding: 30px;
@@ -125,7 +120,7 @@
             background: #fafafa;
             margin: 15px 0;
             width: 100%;
-            height: 460px;
+            height: 480px;
             overflow: auto;
             -webkit-overflow-scrolling: touch;
             touch-action: pan-x pan-y;
@@ -140,33 +135,52 @@
         .crop-box {
             position: absolute;
             border: 3px solid #3498db;
-            background: rgba(52,152,219,0.15);
+            background: rgba(52,152,219,0.10);
             cursor: move;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.25);
             touch-action: none;
             pointer-events: auto;
             will-change: left, top, width, height;
+            z-index: 1;
         }
-        .crop-box.highlight {
+        .crop-box.active {
             border-color: #9b59b6;
-            background: rgba(155,89,182,0.15);
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.25);
+            background: rgba(155,89,182,0.12);
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.20);
+            z-index: 2;
+        }
+        .crop-box .crop-label {
+            position: absolute;
+            top: -22px;
+            left: 4px;
+            background: #3498db;
+            color: white;
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .crop-box.active .crop-label {
+            background: #9b59b6;
         }
         .resize-handle {
             position: absolute;
-            width: 22px;
-            height: 22px;
+            width: 18px;
+            height: 18px;
             background: #3498db;
             border: 2px solid white;
             border-radius: 50%;
             box-shadow: 0 0 4px rgba(0,0,0,0.5);
             touch-action: none;
-            z-index: 2;
+            z-index: 3;
         }
-        .resize-nw { top: -11px; left: -11px; cursor: nw-resize; }
-        .resize-ne { top: -11px; right: -11px; cursor: ne-resize; }
-        .resize-sw { bottom: -11px; left: -11px; cursor: sw-resize; }
-        .resize-se { bottom: -11px; right: -11px; cursor: se-resize; }
+        .crop-box.active .resize-handle { background: #9b59b6; }
+        .resize-nw { top: -9px; left: -9px; cursor: nw-resize; }
+        .resize-ne { top: -9px; right: -9px; cursor: ne-resize; }
+        .resize-sw { bottom: -9px; left: -9px; cursor: sw-resize; }
+        .resize-se { bottom: -9px; right: -9px; cursor: se-resize; }
 
         .image-counter {
             text-align: center;
@@ -176,60 +190,13 @@
             border-radius: 8px;
             margin: 10px 0;
         }
-        .extracted-count {
-            text-align: center;
-            font-weight: 600;
-            color: #27ae60;
-            margin: 8px 0;
-        }
-
-        /* ===== PLANTILLAS ===== */
-        .template-section {
-            background: #f3e8ff;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 12px 0;
-            border-left: 4px solid #9b59b6;
-        }
         .template-controls {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             justify-content: center;
-            margin: 10px 0;
+            margin: 12px 0;
         }
-        .template-controls .btn { flex: 0 1 auto; }
-        .template-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 10px;
-            background: white;
-            border-radius: 8px;
-            min-height: 40px;
-            margin-top: 10px;
-        }
-        .template-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: #9b59b6;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-        .template-badge .remove-tpl {
-            cursor: pointer;
-            opacity: 0.7;
-            transition: 0.2s;
-        }
-        .template-badge .remove-tpl:hover {
-            opacity: 1;
-            transform: scale(1.2);
-        }
-
         .crop-controls {
             display: flex;
             flex-wrap: wrap;
@@ -238,6 +205,15 @@
             justify-content: center;
         }
         .crop-controls .btn { flex: 1 1 120px; min-width: 100px; }
+        .status-bar {
+            background: #e8f5e9;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+            font-weight: 500;
+            color: #2e7d32;
+        }
 
         /* ===== TABLA DE RESULTADOS ===== */
         #result { margin-top: 20px; overflow-x: auto; }
@@ -252,7 +228,6 @@
         .action-cell { white-space: nowrap; }
         .btn-copy { background: transparent; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.5rem; transition: 0.2s; }
         .btn-copy:hover { transform: scale(1.2); }
-        .btn-copy:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
         .btn-toggle-turn { background: #f39c12; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-toggle-turn:hover { background: #e67e22; }
         .btn-export { background: #2c3e50; color: white; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 1rem; }
@@ -295,25 +270,15 @@
             background: #3498db;
             color: white;
         }
-        .status-bar {
-            background: #e8f5e9;
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-            text-align: center;
-            font-weight: 500;
-            color: #2e7d32;
-        }
         @media (max-width: 768px) {
             #cropContainer { height: 360px; }
-            .resize-handle { width: 26px; height: 26px; }
-            .resize-nw, .resize-ne { top: -13px; }
-            .resize-sw, .resize-se { bottom: -13px; }
-            .resize-nw, .resize-sw { left: -13px; }
-            .resize-ne, .resize-se { right: -13px; }
+            .resize-handle { width: 22px; height: 22px; }
+            .resize-nw, .resize-ne { top: -11px; }
+            .resize-sw, .resize-se { bottom: -11px; }
+            .resize-nw, .resize-sw { left: -11px; }
+            .resize-ne, .resize-se { right: -11px; }
             .btn { font-size: 0.95rem; padding: 12px 14px; }
             .crop-controls .btn { flex: 1 1 100%; }
-            .template-controls .btn { flex: 1 1 100%; }
         }
         @media (max-width: 480px) {
             .app-container { padding: 12px; }
@@ -325,7 +290,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Selecciona los tableros en la primera página, guarda las plantillas, y aplícalas automáticamente al resto.</p>
+    <p class="subtitle">Añade múltiples recuadros a la vez, ajústalos y aplica todas las plantillas automáticamente.</p>
 
     <!-- ===== PASO 1: SUBIR ARCHIVOS ===== -->
     <div class="card">
@@ -343,46 +308,29 @@
         </div>
     </div>
 
-    <!-- ===== PASO 2: RECORTE Y PLANTILLAS ===== -->
+    <!-- ===== PASO 2: RECORTE MÚLTIPLE ===== -->
     <div class="card hidden" id="cropSection">
         <div class="card-header">
             <i class="fas fa-crop-alt"></i>
-            <span>Paso 2: Seleccionar tableros</span>
+            <span>Paso 2: Añadir y ajustar recuadros</span>
             <span class="badge" id="imageProgress">Imagen 1 de 1</span>
         </div>
 
-        <!-- Estado -->
         <div class="status-bar" id="statusBar">
-            📐 Modo: Selección de plantillas - Ajusta el recuadro y añade cada tablero
+            🎯 Haz clic en "Añadir recuadro" para cada tablero. Arrástralos y redimensiónalos.
+        </div>
+
+        <div class="template-controls">
+            <button class="btn btn-success btn-sm" id="addBoxBtn"><i class="fas fa-plus"></i> Añadir recuadro</button>
+            <button class="btn btn-purple btn-sm" id="addGridBtn"><i class="fas fa-th"></i> Cuadrícula 3x2</button>
+            <button class="btn btn-warning btn-sm" id="clearBoxesBtn"><i class="fas fa-trash"></i> Eliminar todos</button>
+            <button class="btn btn-primary btn-sm" id="saveTemplatesBtn" disabled><i class="fas fa-save"></i> Guardar plantillas</button>
         </div>
 
         <div id="cropContainer">
             <img id="cropImage" />
-            <div class="crop-box hidden">
-                <div class="resize-handle resize-nw"></div>
-                <div class="resize-handle resize-ne"></div>
-                <div class="resize-handle resize-sw"></div>
-                <div class="resize-handle resize-se"></div>
-            </div>
         </div>
 
-        <!-- Plantillas -->
-        <div class="template-section">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-                <strong><i class="fas fa-clone"></i> Plantillas guardadas</strong>
-                <span id="templateCount" style="font-size:0.9rem;color:#7f8c8d;">0</span>
-            </div>
-            <div class="template-list" id="templateList">
-                <span style="color:#999;font-size:0.9rem;">No hay plantillas. Ajusta el recuadro y añade cada tablero.</span>
-            </div>
-            <div class="template-controls">
-                <button class="btn btn-success btn-sm" id="addTemplateBtn"><i class="fas fa-plus"></i> Añadir plantilla</button>
-                <button class="btn btn-purple btn-sm" id="finishTemplatesBtn" disabled><i class="fas fa-check-double"></i> Finalizar plantillas</button>
-                <button class="btn btn-outline btn-sm" id="clearTemplatesBtn"><i class="fas fa-trash"></i> Limpiar</button>
-            </div>
-        </div>
-
-        <!-- Controles de navegación -->
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
             <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar imagen</button>
@@ -390,7 +338,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 En la primera página, ajusta el recuadro para cada tablero y haz clic en "Añadir plantilla".
+            💡 Ajusta cada recuadro al tablero correspondiente. Luego guarda todas las plantillas y procesa el resto de imágenes.
         </p>
     </div>
 
@@ -430,27 +378,20 @@
 
 <script>
 // ============================================================
-//  SISTEMA DE RECORTE CON MÚLTIPLES PLANTILLAS
+//  SISTEMA DE MÚLTIPLES RECUADROS SIMULTÁNEOS
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
 
+// Estado
 let originalImage = null;
-let cropBox = null;
-let isDragging = false, isResizing = false;
-let resizeDirection = null;
-let startX, startY;
-let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
-let startCropX, startCropY, startCropW, startCropH;
-
-// Variables de plantillas
-let templates = [];              // Array de {x, y, w, h, label}
-let templatesFinalized = false;  // Si ya se finalizaron
-
-// Variables de imágenes
+let cropBoxes = [];           // Array de objetos { x, y, w, h, element, label, index }
+let activeBoxIndex = -1;
 let imageItems = [];
 let currentIndex = 0;
 let results = [];
+let savedTemplates = [];      // Plantillas guardadas (coordenadas relativas)
+let templatesSaved = false;
 let processingAll = false;
 
 // Elementos DOM
@@ -463,15 +404,12 @@ const cropNextBtn = document.getElementById('cropNextBtn');
 const cropSkipBtn = document.getElementById('cropSkipBtn');
 const statusBar = document.getElementById('statusBar');
 
-// Elementos de plantillas
-const addTemplateBtn = document.getElementById('addTemplateBtn');
-const finishTemplatesBtn = document.getElementById('finishTemplatesBtn');
-const clearTemplatesBtn = document.getElementById('clearTemplatesBtn');
-const templateList = document.getElementById('templateList');
-const templateCount = document.getElementById('templateCount');
+const addBoxBtn = document.getElementById('addBoxBtn');
+const addGridBtn = document.getElementById('addGridBtn');
+const clearBoxesBtn = document.getElementById('clearBoxesBtn');
+const saveTemplatesBtn = document.getElementById('saveTemplatesBtn');
 const applyAllBtn = document.getElementById('applyAllBtn');
 
-// Elementos generales
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
 const uploadForm = document.getElementById('uploadForm');
@@ -484,11 +422,12 @@ const notif = document.getElementById('notification');
 const notifText = document.getElementById('notifText');
 
 // ============================================================
-//  FUNCIONES DE RECORTE (sin cambios)
+//  FUNCIONES AUXILIARES
 // ============================================================
-function getPointerPosition(e) {
-    if (e.touches) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
-    return { clientX: e.clientX, clientY: e.clientY };
+function showNotification(msg) {
+    notifText.textContent = msg;
+    notif.classList.add('show');
+    setTimeout(() => notif.classList.remove('show'), 3000);
 }
 
 function getScaleFactors() {
@@ -502,203 +441,11 @@ function getScaleFactors() {
     return { scaleX: origW / displayW, scaleY: origH / displayH };
 }
 
-function updateCropBox() {
-    if (!cropBox) return;
-    cropBox.style.left = cropX + 'px';
-    cropBox.style.top = cropY + 'px';
-    cropBox.style.width = cropW + 'px';
-    cropBox.style.height = cropH + 'px';
+function getPointerPosition(e) {
+    if (e.touches) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    return { clientX: e.clientX, clientY: e.clientY };
 }
 
-function resetCropToCenter() {
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-    if (displayW === 0 || displayH === 0) return;
-    const size = 0.25;
-    cropX = (displayW - displayW * size) / 2;
-    cropY = (displayH - displayH * size) / 2;
-    cropW = displayW * size;
-    cropH = displayH * size;
-    updateCropBox();
-}
-
-function initCropBox() {
-    cropBox = document.querySelector('.crop-box');
-    if (!cropBox) return;
-
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-    if (displayW === 0 || displayH === 0) {
-        setTimeout(initCropBox, 100);
-        return;
-    }
-
-    resetCropToCenter();
-
-    // Eventos
-    const handles = cropBox.querySelectorAll('.resize-handle');
-    handles.forEach(handle => {
-        handle.removeEventListener('mousedown', startResize);
-        handle.removeEventListener('touchstart', startResizeTouch);
-        handle.addEventListener('mousedown', startResize);
-        handle.addEventListener('touchstart', startResizeTouch, { passive: false });
-    });
-    cropBox.removeEventListener('mousedown', startDrag);
-    cropBox.removeEventListener('touchstart', startDragTouch);
-    cropBox.addEventListener('mousedown', startDrag);
-    cropBox.addEventListener('touchstart', startDragTouch, { passive: false });
-
-    document.removeEventListener('mousemove', handleMove);
-    document.removeEventListener('touchmove', handleMoveTouch);
-    document.removeEventListener('mouseup', stopInteraction);
-    document.removeEventListener('touchend', stopInteractionTouch);
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('touchmove', handleMoveTouch, { passive: false });
-    document.addEventListener('mouseup', stopInteraction);
-    document.addEventListener('touchend', stopInteractionTouch, { passive: false });
-
-    cropBox.classList.remove('hidden');
-    updateTemplateButtons();
-}
-
-// ===== MANEJADORES =====
-function startDrag(e) {
-    if (e.target.classList.contains('resize-handle')) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    isDragging = true;
-    startX = pos.clientX;
-    startY = pos.clientY;
-    startCropX = cropX;
-    startCropY = cropY;
-}
-function startDragTouch(e) {
-    if (e.target.classList.contains('resize-handle')) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    isDragging = true;
-    startX = pos.clientX;
-    startY = pos.clientY;
-    startCropX = cropX;
-    startCropY = cropY;
-}
-function startResize(e) {
-    if (!e.target.classList.contains('resize-handle')) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    isResizing = true;
-    startX = pos.clientX;
-    startY = pos.clientY;
-    startCropX = cropX;
-    startCropY = cropY;
-    startCropW = cropW;
-    startCropH = cropH;
-    resizeDirection = e.target.classList[1];
-}
-function startResizeTouch(e) {
-    if (!e.target.classList.contains('resize-handle')) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    isResizing = true;
-    startX = pos.clientX;
-    startY = pos.clientY;
-    startCropX = cropX;
-    startCropY = cropY;
-    startCropW = cropW;
-    startCropH = cropH;
-    resizeDirection = e.target.classList[1];
-}
-
-function handleMove(e) {
-    if (!isDragging && !isResizing) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    processMove(pos.clientX, pos.clientY);
-}
-function handleMoveTouch(e) {
-    if (!isDragging && !isResizing) return;
-    e.preventDefault();
-    const pos = getPointerPosition(e);
-    processMove(pos.clientX, pos.clientY);
-}
-
-function processMove(clientX, clientY) {
-    const dx = clientX - startX;
-    const dy = clientY - startY;
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-
-    if (isDragging) {
-        let newX = startCropX + dx;
-        let newY = startCropY + dy;
-        newX = Math.max(0, Math.min(newX, displayW - cropW));
-        newY = Math.max(0, Math.min(newY, displayH - cropH));
-        cropX = newX;
-        cropY = newY;
-    } else if (isResizing) {
-        let newW = startCropW, newH = startCropH;
-        let newX = startCropX, newY = startCropY;
-        switch (resizeDirection) {
-            case 'resize-nw':
-                newW = startCropW - dx; newH = startCropH - dy;
-                newX = startCropX + dx; newY = startCropY + dy; break;
-            case 'resize-ne':
-                newW = startCropW + dx; newH = startCropH - dy;
-                newY = startCropY + dy; break;
-            case 'resize-sw':
-                newW = startCropW - dx; newH = startCropH + dy;
-                newX = startCropX + dx; break;
-            case 'resize-se':
-                newW = startCropW + dx; newH = startCropH + dy; break;
-        }
-        if (newW >= 30 && newX >= 0 && newX + newW <= displayW) {
-            cropW = newW; cropX = newX;
-        }
-        if (newH >= 30 && newY >= 0 && newY + newH <= displayH) {
-            cropH = newH; cropY = newY;
-        }
-    }
-    updateCropBox();
-    startX = clientX; startY = clientY;
-    startCropX = cropX; startCropY = cropY;
-    startCropW = cropW; startCropH = cropH;
-}
-
-function stopInteraction() { isDragging = false; isResizing = false; }
-function stopInteractionTouch() { isDragging = false; isResizing = false; }
-
-// ===== OBTENER RECORTE EN BASE64 =====
-function getCroppedDataURL() {
-    if (!originalImage || !cropBox) return null;
-    const { scaleX, scaleY } = getScaleFactors();
-    const origX = cropX * scaleX;
-    const origY = cropY * scaleY;
-    const origW = cropW * scaleX;
-    const origH = cropH * scaleY;
-    const canvas = document.createElement('canvas');
-    const outW = Math.round(origW);
-    const outH = Math.round(origH);
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(originalImage, origX, origY, origW, origH, 0, 0, outW, outH);
-    return canvas.toDataURL('image/jpeg', 0.85);
-}
-
-// ===== OBTENER PLANTILLA DESDE EL RECORTE ACTUAL =====
-function getTemplateFromCrop() {
-    const displayW = cropImage.naturalWidth || cropImage.width;
-    const displayH = cropImage.naturalHeight || cropImage.height;
-    if (displayW === 0 || displayH === 0) return null;
-    return {
-        x: cropX / displayW,
-        y: cropY / displayH,
-        w: cropW / displayW,
-        h: cropH / displayH
-    };
-}
-
-// ===== ESCALAR IMAGEN =====
 function scaleImageToMaxWidth(img, maxWidth) {
     const canvas = document.createElement('canvas');
     const ratio = maxWidth / img.width;
@@ -711,116 +458,381 @@ function scaleImageToMaxWidth(img, maxWidth) {
     return canvas;
 }
 
+function getDisplaySize() {
+    return {
+        w: cropImage.naturalWidth || cropImage.width,
+        h: cropImage.naturalHeight || cropImage.height
+    };
+}
+
 // ============================================================
-//  GESTIÓN DE PLANTILLAS
+//  GESTIÓN DE RECUADROS
 // ============================================================
 
-function updateTemplateList() {
-    templateList.innerHTML = '';
-    if (templates.length === 0) {
-        templateList.innerHTML = '<span style="color:#999;font-size:0.9rem;">No hay plantillas. Ajusta el recuadro y añade cada tablero.</span>';
-        templateCount.textContent = '0';
-        return;
-    }
-    templates.forEach((t, idx) => {
-        const badge = document.createElement('span');
-        badge.className = 'template-badge';
-        badge.innerHTML = `
-            ${t.label || `Tablero ${idx+1}`}
-            <span class="remove-tpl" data-idx="${idx}" title="Eliminar">✕</span>
-        `;
-        templateList.appendChild(badge);
-        badge.querySelector('.remove-tpl').addEventListener('click', function(e) {
-            e.stopPropagation();
-            const idx = parseInt(this.dataset.idx);
-            templates.splice(idx, 1);
-            // Renombrar etiquetas
-            templates.forEach((t, i) => t.label = `Tablero ${i+1}`);
-            updateTemplateList();
-            updateTemplateButtons();
-            showNotification('Plantilla eliminada');
-        });
+function createBoxElement(x, y, w, h, label) {
+    const box = document.createElement('div');
+    box.className = 'crop-box';
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
+    box.style.width = w + 'px';
+    box.style.height = h + 'px';
+    box.dataset.index = cropBoxes.length;
+
+    // Etiqueta
+    const lbl = document.createElement('span');
+    lbl.className = 'crop-label';
+    lbl.textContent = label || `#${cropBoxes.length+1}`;
+    box.appendChild(lbl);
+
+    // Tiradores
+    const dirs = ['nw', 'ne', 'sw', 'se'];
+    dirs.forEach(d => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle resize-${d}`;
+        box.appendChild(handle);
     });
-    templateCount.textContent = templates.length;
-    updateTemplateButtons();
+
+    // Eventos
+    box.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('resize-handle')) return;
+        activateBox(box);
+        startDragBox(e, box);
+    });
+    box.addEventListener('touchstart', (e) => {
+        if (e.target.classList.contains('resize-handle')) return;
+        activateBox(box);
+        startDragBoxTouch(e, box);
+    }, { passive: false });
+
+    // Tiradores
+    box.querySelectorAll('.resize-handle').forEach(h => {
+        h.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            activateBox(box);
+            startResizeBox(e, box, h.className.split(' ')[1].replace('resize-', ''));
+        });
+        h.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            activateBox(box);
+            startResizeBoxTouch(e, box, h.className.split(' ')[1].replace('resize-', ''));
+        }, { passive: false });
+    });
+
+    cropContainer.appendChild(box);
+    return box;
 }
 
-function updateTemplateButtons() {
-    const hasTemplates = templates.length > 0;
-    const isFirstImage = currentIndex === 0;
-    const notFinalized = !templatesFinalized;
+function addBox(x, y, w, h, label) {
+    const size = getDisplaySize();
+    if (size.w === 0 || size.h === 0) return;
 
-    // Solo se puede añadir plantillas en la primera imagen y antes de finalizar
-    addTemplateBtn.disabled = !(isFirstImage && notFinalized && cropBox);
-    finishTemplatesBtn.disabled = !(hasTemplates && isFirstImage && notFinalized);
-    applyAllBtn.disabled = !(hasTemplates && templatesFinalized);
+    if (x === undefined) {
+        // Recuadro inicial: 25% del centro
+        const boxSize = Math.min(size.w, size.h) * 0.25;
+        x = (size.w - boxSize) / 2;
+        y = (size.h - boxSize) / 2;
+        w = boxSize;
+        h = boxSize;
+    }
 
-    // Si estamos en la primera imagen y no hay plantillas finalizadas, mostrar modo selección
-    if (isFirstImage && !templatesFinalized) {
-        statusBar.innerHTML = '📐 Modo: Selección de plantillas - Ajusta el recuadro y añade cada tablero';
-        statusBar.style.background = '#e8f5e9';
-        statusBar.style.color = '#2e7d32';
-    } else if (templatesFinalized && hasTemplates) {
-        statusBar.innerHTML = `✅ ${templates.length} plantillas guardadas. Puedes procesar las imágenes.`;
-        statusBar.style.background = '#e3f2fd';
-        statusBar.style.color = '#0d47a1';
+    const box = createBoxElement(x, y, w, h, label || `#${cropBoxes.length+1}`);
+    const data = { x, y, w, h, element: box, label: label || `#${cropBoxes.length+1}`, index: cropBoxes.length };
+    cropBoxes.push(data);
+    updateBoxLabels();
+    updateUI();
+    activateBox(box);
+    return data;
+}
+
+function removeBox(index) {
+    if (index < 0 || index >= cropBoxes.length) return;
+    const box = cropBoxes[index];
+    if (box.element) box.element.remove();
+    cropBoxes.splice(index, 1);
+    // Reasignar índices
+    cropBoxes.forEach((b, i) => {
+        b.index = i;
+        b.element.dataset.index = i;
+    });
+    updateBoxLabels();
+    if (activeBoxIndex >= cropBoxes.length) activeBoxIndex = cropBoxes.length - 1;
+    if (activeBoxIndex >= 0) activateBox(cropBoxes[activeBoxIndex].element);
+    else activeBoxIndex = -1;
+    updateUI();
+}
+
+function clearBoxes() {
+    cropBoxes.forEach(b => b.element.remove());
+    cropBoxes = [];
+    activeBoxIndex = -1;
+    updateUI();
+    updateBoxLabels();
+}
+
+function activateBox(element) {
+    cropBoxes.forEach(b => b.element.classList.remove('active'));
+    if (element) {
+        element.classList.add('active');
+        const idx = parseInt(element.dataset.index);
+        activeBoxIndex = idx;
     } else {
-        statusBar.innerHTML = '📐 Modo: Visualización';
-        statusBar.style.background = '#f5f5f5';
-        statusBar.style.color = '#616161';
+        activeBoxIndex = -1;
     }
 }
 
-// ===== AÑADIR PLANTILLA =====
-addTemplateBtn.addEventListener('click', function() {
-    if (currentIndex !== 0) {
-        showNotification('❌ Solo puedes añadir plantillas en la primera imagen');
-        return;
+function updateBoxLabels() {
+    cropBoxes.forEach((b, i) => {
+        const lbl = b.element.querySelector('.crop-label');
+        if (lbl) lbl.textContent = `#${i+1}`;
+    });
+}
+
+function updateUI() {
+    saveTemplatesBtn.disabled = (cropBoxes.length === 0);
+    const hasSaved = savedTemplates.length > 0 && templatesSaved;
+    applyAllBtn.disabled = !hasSaved;
+    statusBar.textContent = cropBoxes.length > 0 ?
+        `🎯 ${cropBoxes.length} recuadros activos. Ajusta cada uno al tablero correspondiente.` :
+        '🎯 Haz clic en "Añadir recuadro" para cada tablero.';
+}
+
+// ============================================================
+//  ARRASTRE Y REDIMENSIÓN (similar al original pero para cada box)
+// ============================================================
+
+let dragData = null;
+
+function startDragBox(e, box) {
+    const idx = parseInt(box.dataset.index);
+    const data = cropBoxes[idx];
+    if (!data) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    dragData = {
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origX: data.x,
+        origY: data.y,
+        mode: 'drag'
+    };
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+}
+
+function startDragBoxTouch(e, box) {
+    const idx = parseInt(box.dataset.index);
+    const data = cropBoxes[idx];
+    if (!data) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    dragData = {
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origX: data.x,
+        origY: data.y,
+        mode: 'drag'
+    };
+    document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
+    document.addEventListener('touchend', onDragEndTouch, { passive: false });
+}
+
+function startResizeBox(e, box, dir) {
+    const idx = parseInt(box.dataset.index);
+    const data = cropBoxes[idx];
+    if (!data) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    dragData = {
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origX: data.x,
+        origY: data.y,
+        origW: data.w,
+        origH: data.h,
+        dir: dir,
+        mode: 'resize'
+    };
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+}
+
+function startResizeBoxTouch(e, box, dir) {
+    const idx = parseInt(box.dataset.index);
+    const data = cropBoxes[idx];
+    if (!data) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    dragData = {
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origX: data.x,
+        origY: data.y,
+        origW: data.w,
+        origH: data.h,
+        dir: dir,
+        mode: 'resize'
+    };
+    document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
+    document.addEventListener('touchend', onDragEndTouch, { passive: false });
+}
+
+function onDragMove(e) {
+    if (!dragData) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    processDrag(pos.clientX, pos.clientY);
+}
+
+function onDragMoveTouch(e) {
+    if (!dragData) return;
+    e.preventDefault();
+    const pos = getPointerPosition(e);
+    processDrag(pos.clientX, pos.clientY);
+}
+
+function processDrag(clientX, clientY) {
+    const dx = clientX - dragData.startX;
+    const dy = clientY - dragData.startY;
+    const size = getDisplaySize();
+    const data = cropBoxes[dragData.index];
+    if (!data) return;
+
+    if (dragData.mode === 'drag') {
+        let newX = dragData.origX + dx;
+        let newY = dragData.origY + dy;
+        newX = Math.max(0, Math.min(newX, size.w - data.w));
+        newY = Math.max(0, Math.min(newY, size.h - data.h));
+        data.x = newX;
+        data.y = newY;
+    } else if (dragData.mode === 'resize') {
+        let newW = dragData.origW;
+        let newH = dragData.origH;
+        let newX = dragData.origX;
+        let newY = dragData.origY;
+        const dir = dragData.dir;
+        switch (dir) {
+            case 'nw':
+                newW = dragData.origW - dx;
+                newH = dragData.origH - dy;
+                newX = dragData.origX + dx;
+                newY = dragData.origY + dy;
+                break;
+            case 'ne':
+                newW = dragData.origW + dx;
+                newH = dragData.origH - dy;
+                newY = dragData.origY + dy;
+                break;
+            case 'sw':
+                newW = dragData.origW - dx;
+                newH = dragData.origH + dy;
+                newX = dragData.origX + dx;
+                break;
+            case 'se':
+                newW = dragData.origW + dx;
+                newH = dragData.origH + dy;
+                break;
+        }
+        if (newW >= 30 && newX >= 0 && newX + newW <= size.w) {
+            data.w = newW;
+            data.x = newX;
+        }
+        if (newH >= 30 && newY >= 0 && newY + newH <= size.h) {
+            data.h = newH;
+            data.y = newY;
+        }
     }
-    if (templatesFinalized) {
-        showNotification('❌ Ya finalizaste las plantillas');
-        return;
-    }
-    const t = getTemplateFromCrop();
-    if (!t) {
-        showNotification('❌ No se pudo guardar la plantilla');
-        return;
-    }
-    const label = `Tablero ${templates.length + 1}`;
-    templates.push({ ...t, label });
-    updateTemplateList();
-    // Resetear recuadro al centro para la siguiente selección
-    resetCropToCenter();
-    showNotification(`✅ Plantilla ${templates.length} guardada`);
-    updateTemplateButtons();
+    // Actualizar elemento
+    data.element.style.left = data.x + 'px';
+    data.element.style.top = data.y + 'px';
+    data.element.style.width = data.w + 'px';
+    data.element.style.height = data.h + 'px';
+}
+
+function onDragEnd(e) {
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup', onDragEnd);
+    dragData = null;
+    updateUI();
+}
+
+function onDragEndTouch(e) {
+    document.removeEventListener('touchmove', onDragMoveTouch);
+    document.removeEventListener('touchend', onDragEndTouch);
+    dragData = null;
+    updateUI();
+}
+
+// ============================================================
+//  BOTONES DE RECUADROS
+// ============================================================
+
+addBoxBtn.addEventListener('click', function() {
+    if (!originalImage) return;
+    addBox();
+    showNotification('Recuadro añadido. Ajusta su posición y tamaño.');
 });
 
-// ===== FINALIZAR PLANTILLAS =====
-finishTemplatesBtn.addEventListener('click', function() {
-    if (templates.length === 0) {
-        showNotification('❌ No hay plantillas para finalizar');
-        return;
+addGridBtn.addEventListener('click', function() {
+    if (!originalImage) return;
+    const size = getDisplaySize();
+    if (size.w === 0 || size.h === 0) return;
+    // Cuadrícula 3 filas x 2 columnas
+    const rows = 3, cols = 2;
+    const cellW = size.w / cols;
+    const cellH = size.h / rows;
+    const margin = 10;
+    clearBoxes();
+    let count = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = c * cellW + margin/2;
+            const y = r * cellH + margin/2;
+            const w = cellW - margin;
+            const h = cellH - margin;
+            if (w > 20 && h > 20) {
+                addBox(x, y, w, h, `#${++count}`);
+            }
+        }
     }
-    if (currentIndex !== 0) {
-        showNotification('❌ Solo puedes finalizar plantillas en la primera imagen');
-        return;
-    }
-    templatesFinalized = true;
-    updateTemplateButtons();
-    showNotification(`✅ ${templates.length} plantillas finalizadas. Ahora puedes procesar las imágenes.`);
-    // Habilitar el botón de aplicar todas
-    applyAllBtn.disabled = false;
+    showNotification(`Cuadrícula ${rows}x${cols} creada. Ajusta cada recuadro.`);
 });
 
-// ===== LIMPIAR PLANTILLAS =====
-clearTemplatesBtn.addEventListener('click', function() {
-    if (templates.length === 0) return;
-    if (!confirm('¿Eliminar todas las plantillas?')) return;
-    templates = [];
-    templatesFinalized = false;
-    updateTemplateList();
-    updateTemplateButtons();
-    showNotification('Plantillas eliminadas');
+clearBoxesBtn.addEventListener('click', function() {
+    if (cropBoxes.length === 0) return;
+    if (!confirm('¿Eliminar todos los recuadros?')) return;
+    clearBoxes();
+    showNotification('Recuadros eliminados.');
+});
+
+// ============================================================
+//  GUARDAR PLANTILLAS
+// ============================================================
+
+saveTemplatesBtn.addEventListener('click', function() {
+    if (cropBoxes.length === 0) {
+        showNotification('❌ No hay recuadros para guardar.');
+        return;
+    }
+    const size = getDisplaySize();
+    if (size.w === 0 || size.h === 0) return;
+    savedTemplates = cropBoxes.map(b => ({
+        x: b.x / size.w,
+        y: b.y / size.h,
+        w: b.w / size.w,
+        h: b.h / size.h
+    }));
+    templatesSaved = true;
+    updateUI();
+    showNotification(`✅ ${savedTemplates.length} plantillas guardadas. Ahora puedes procesar las imágenes.`);
 });
 
 // ============================================================
@@ -828,6 +840,7 @@ clearTemplatesBtn.addEventListener('click', function() {
 // ============================================================
 
 async function applyTemplatesToImage(imageDataUrl, originalName, page) {
+    if (savedTemplates.length === 0 || !templatesSaved) return [];
     const img = new Image();
     await new Promise((resolve) => {
         img.onload = resolve;
@@ -836,7 +849,7 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
     const origW = img.width;
     const origH = img.height;
     const resultsList = [];
-    for (const t of templates) {
+    for (const t of savedTemplates) {
         const cropOrigX = t.x * origW;
         const cropOrigY = t.y * origH;
         const cropOrigW = t.w * origW;
@@ -871,16 +884,12 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
 }
 
 // ============================================================
-//  APLICAR Y PROCESAR TODAS LAS IMÁGENES
+//  APLICAR Y PROCESAR TODAS
 // ============================================================
 
 applyAllBtn.addEventListener('click', async function() {
-    if (templates.length === 0) {
-        showNotification('❌ No hay plantillas guardadas');
-        return;
-    }
-    if (!templatesFinalized) {
-        showNotification('❌ Primero finaliza las plantillas');
+    if (savedTemplates.length === 0 || !templatesSaved) {
+        showNotification('❌ Primero guarda las plantillas');
         return;
     }
     if (processingAll) return;
@@ -891,7 +900,6 @@ applyAllBtn.addEventListener('click', async function() {
     let totalProcessed = 0;
     let totalErrors = 0;
 
-    // Procesar todas las imágenes desde la actual hasta el final
     for (let i = currentIndex; i < imageItems.length; i++) {
         const item = imageItems[i];
         const imgResults = await applyTemplatesToImage(item.dataUrl, item.originalName, item.page);
@@ -903,7 +911,6 @@ applyAllBtn.addEventListener('click', async function() {
                 totalErrors++;
             }
         }
-        // Actualizar progreso cada 2 imágenes (para no saturar la UI)
         if (i % 2 === 0 || i === imageItems.length - 1) {
             applyAllBtn.textContent = `⏳ Procesando ${i+1}/${imageItems.length}...`;
         }
@@ -941,15 +948,23 @@ function showCropItem(index) {
         const canvas = scaleImageToMaxWidth(originalImage, MAX_DISPLAY_WIDTH);
         cropImage.src = canvas.toDataURL('image/jpeg');
         cropImage.onload = function() {
-            setTimeout(initCropBox, 50);
+            // Si es la primera imagen y no hay recuadros, crear uno por defecto
+            if (index === 0 && cropBoxes.length === 0) {
+                addBox();
+            }
+            // Restaurar recuadros si ya había guardados (solo si es la primera imagen)
+            if (index === 0 && savedTemplates.length > 0 && templatesSaved) {
+                // Si ya hay plantillas, las mostramos en la imagen actual
+                // (pero no las reaplicamos automáticamente)
+            }
+            updateUI();
         };
-        if (cropImage.complete) setTimeout(initCropBox, 50);
+        if (cropImage.complete) cropImage.onload();
     };
     originalImage.src = item.dataUrl;
 
     cropPrevBtn.disabled = (index === 0);
     cropNextBtn.disabled = (index === imageItems.length - 1);
-    updateTemplateButtons();
 }
 
 // ===== SUBIR ARCHIVOS =====
@@ -966,11 +981,13 @@ uploadForm.addEventListener('submit', async function(e) {
     imageItems = [];
     results = [];
     currentIndex = 0;
-    templates = [];
-    templatesFinalized = false;
+    cropBoxes = [];
+    savedTemplates = [];
+    templatesSaved = false;
+    clearBoxes();
     resultContainer.classList.add('hidden');
     exportSection.style.display = 'none';
-    updateTemplateList();
+    updateUI();
 
     try {
         const pagesStr = pagesInput.value.trim() || '1';
@@ -1024,14 +1041,11 @@ uploadForm.addEventListener('submit', async function(e) {
 
         cropSection.classList.remove('hidden');
         currentIndex = 0;
-        templatesFinalized = false;
-        templates = [];
-        updateTemplateList();
         showCropItem(currentIndex);
 
         uploadBtn.disabled = false;
         uploadBtn.innerHTML = '<i class="fas fa-images"></i> Cargar y extraer páginas';
-        showNotification(`✅ ${imageItems.length} imágenes cargadas. Selecciona los tableros en la primera página.`);
+        showNotification(`✅ ${imageItems.length} imágenes cargadas. Añade recuadros en la primera página.`);
 
     } catch (error) {
         showNotification('❌ Error: ' + error.message);
@@ -1226,14 +1240,10 @@ document.getElementById('downloadPgnBtn').addEventListener('click', async functi
     }
 });
 
-// ===== NOTIFICACIÓN =====
-function showNotification(msg) {
-    notifText.textContent = msg;
-    notif.classList.add('show');
-    setTimeout(() => notif.classList.remove('show'), 3000);
-}
+// ============================================================
+//  VISTA PREVIA DE ARCHIVOS
+// ============================================================
 
-// ===== VISTA PREVIA =====
 fileInput.addEventListener('change', function() {
     previewDiv.innerHTML = '';
     const files = this.files;
@@ -1257,6 +1267,12 @@ fileInput.addEventListener('change', function() {
     }
     uploadBtn.disabled = false;
 });
+
+// ============================================================
+//  INICIO: creación de recuadro por defecto al cargar imagen
+// ============================================================
+
+// (se crea automáticamente al cargar la primera imagen)
 </script>
 </body>
 </html>
