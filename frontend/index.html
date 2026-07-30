@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Con guías de alineación</title>
+    <title>Chess PDF to FEN - Cuadrícula de precisión</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -132,7 +132,7 @@
             max-height: none;
         }
 
-        /* ===== GUÍAS DE ALINEACIÓN (cuadrícula 3x3 verde) ===== */
+        /* ===== CUADRÍCULA DINÁMICA ===== */
         .grid-overlay {
             position: absolute;
             top: 0;
@@ -146,7 +146,7 @@
         .grid-overlay.active { display: block; }
         .grid-line {
             position: absolute;
-            background: rgba(46, 204, 113, 0.5);
+            background: rgba(46, 204, 113, 0.4);
             pointer-events: none;
         }
         .grid-line.horizontal {
@@ -159,10 +159,6 @@
             height: 100%;
             width: 1px;
         }
-        .grid-line.h1 { top: 33.33%; }
-        .grid-line.h2 { top: 66.66%; }
-        .grid-line.v1 { left: 33.33%; }
-        .grid-line.v2 { left: 66.66%; }
 
         /* ===== RECUADROS ===== */
         .crop-box {
@@ -255,6 +251,15 @@
             gap: 10px;
             justify-content: center;
             margin: 12px 0;
+            align-items: center;
+        }
+        .template-controls select {
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 0.9rem;
+            background: white;
+            min-height: 34px;
         }
         .crop-controls {
             display: flex;
@@ -386,7 +391,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Con guías de alineación verdes y recuadro pequeño para móvil.</p>
+    <p class="subtitle">Cuadrícula de precisión ajustable para alinear recortes.</p>
 
     <!-- PASO 1 -->
     <div class="card">
@@ -419,15 +424,18 @@
             <button class="btn btn-warning btn-sm" id="clearBoxesBtn"><i class="fas fa-trash"></i> Eliminar todos</button>
             <button class="btn btn-primary btn-sm" id="saveTemplatesBtn" disabled><i class="fas fa-save"></i> Guardar plantillas</button>
             <button class="btn btn-outline btn-sm" id="toggleGridBtn"><i class="fas fa-th"></i> Mostrar guías</button>
+            <select id="gridDivisionsSelect">
+                <option value="3">3×3</option>
+                <option value="5">5×5</option>
+                <option value="10" selected>10×10</option>
+                <option value="20">20×20</option>
+                <option value="30">30×30</option>
+                <option value="100">100×100</option>
+            </select>
         </div>
         <div id="cropContainer">
             <img id="cropImage" />
-            <div class="grid-overlay" id="gridOverlay">
-                <div class="grid-line horizontal h1"></div>
-                <div class="grid-line horizontal h2"></div>
-                <div class="grid-line vertical v1"></div>
-                <div class="grid-line vertical v2"></div>
-            </div>
+            <div class="grid-overlay" id="gridOverlay"></div>
         </div>
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
@@ -438,7 +446,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Usa las guías verdes (regla de tercios) para alinear los recuadros.
+            💡 Ajusta la densidad de la cuadrícula con el selector. Las líneas verdes te ayudarán a alinear los recuadros.
         </p>
     </div>
 
@@ -487,7 +495,7 @@
 
 <script>
 // ============================================================
-//  VERSIÓN CON GUÍAS DE ALINEACIÓN Y RECUADRO PEQUEÑO
+//  VERSIÓN CON CUADRÍCULA DE PRECISIÓN (DENSIDAD AJUSTABLE)
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
@@ -525,6 +533,7 @@ const saveTemplatesBtn = document.getElementById('saveTemplatesBtn');
 const applyAllBtn = document.getElementById('applyAllBtn');
 const toggleGridBtn = document.getElementById('toggleGridBtn');
 const gridOverlay = document.getElementById('gridOverlay');
+const gridDivisionsSelect = document.getElementById('gridDivisionsSelect');
 
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
@@ -543,7 +552,7 @@ const modalInfo = document.getElementById('modalInfo');
 const modalClose = document.getElementById('modalClose');
 
 // ============================================================
-//  FUNCIONES DE ESCALA (corregidas)
+//  FUNCIONES DE ESCALA
 // ============================================================
 function getScaleFactors() {
     if (!cropImage || !originalImage) return { scaleX: 1, scaleY: 1 };
@@ -605,7 +614,36 @@ function showNotification(msg) {
 }
 
 // ============================================================
-//  GESTIÓN DE RECUADROS (con escalado y tamaño pequeño)
+//  CUADRÍCULA DE PRECISIÓN (DINÁMICA)
+// ============================================================
+function buildGrid(divisions) {
+    gridOverlay.innerHTML = '';
+    for (let i = 1; i < divisions; i++) {
+        const pos = (i / divisions) * 100;
+        // Horizontal
+        const hLine = document.createElement('div');
+        hLine.className = 'grid-line horizontal';
+        hLine.style.top = pos + '%';
+        gridOverlay.appendChild(hLine);
+        // Vertical
+        const vLine = document.createElement('div');
+        vLine.className = 'grid-line vertical';
+        vLine.style.left = pos + '%';
+        gridOverlay.appendChild(vLine);
+    }
+}
+
+// Reconstruir cuadrícula al cambiar el selector
+gridDivisionsSelect.addEventListener('change', function() {
+    const divs = parseInt(this.value);
+    buildGrid(divs);
+    if (gridVisible) {
+        gridOverlay.classList.add('active');
+    }
+});
+
+// ============================================================
+//  GESTIÓN DE RECUADROS
 // ============================================================
 
 function createBoxElement(x, y, w, h, label) {
@@ -667,14 +705,12 @@ function createBoxElement(x, y, w, h, label) {
     });
 
     cropContainer.appendChild(box);
-    // Posicionar en CSS
     const css = imageToCSS(x, y, w, h);
     box.style.left = css.x + 'px';
     box.style.top = css.y + 'px';
     box.style.width = css.w + 'px';
     box.style.height = css.h + 'px';
 
-    // Actualizar tamaño en la etiqueta
     const sizeSpan = box.querySelector('.crop-size');
     if (sizeSpan) sizeSpan.textContent = `${Math.round(w)}×${Math.round(h)}`;
 
@@ -686,12 +722,10 @@ function addBox(x, y, w, h, label) {
     const display = getDisplaySize();
     if (natural.w === 0 || natural.h === 0 || display.w === 0 || display.h === 0) return null;
 
-    // Si no se pasan coordenadas, crear un recuadro pequeño (10% del ancho visible) centrado en la vista
     if (x === undefined) {
-        const sizeRatio = 0.10; // 10% del ancho visible
+        const sizeRatio = 0.10;
         const targetWidth = display.w * sizeRatio;
-        const targetHeight = targetWidth * 0.8; // proporción 5:4
-        // Convertir a píxeles de imagen
+        const targetHeight = targetWidth * 0.8;
         const imgSize = cssToImage(
             (display.w - targetWidth) / 2,
             (display.h - targetHeight) / 2,
@@ -777,9 +811,8 @@ function updateUI() {
 }
 
 // ============================================================
-//  ARRASTRE Y REDIMENSIÓN (con escalado y actualización de tamaño)
+//  ARRASTRE Y REDIMENSIÓN
 // ============================================================
-
 let dragData = null;
 
 function startDrag(e, box) {
@@ -944,7 +977,6 @@ function processDrag(clientX, clientY) {
         data.element.style.top = css.y + 'px';
         data.element.style.width = css.w + 'px';
         data.element.style.height = css.h + 'px';
-        // Actualizar tamaño en etiqueta
         const sizeSpan = data.element.querySelector('.crop-size');
         if (sizeSpan) sizeSpan.textContent = `${Math.round(data.w)}×${Math.round(data.h)}`;
     }
@@ -963,7 +995,7 @@ function onDragEndTouch(e) {
 }
 
 // ============================================================
-//  GUÍAS DE ALINEACIÓN
+//  GUÍAS
 // ============================================================
 toggleGridBtn.addEventListener('click', function() {
     gridVisible = !gridVisible;
@@ -1168,7 +1200,7 @@ function showCropItem(index) {
             if (templatesSaved && savedTemplates.length > 0) {
                 applySavedTemplatesToCurrentImage();
             } else if (index === 0 && cropBoxesData.length === 0) {
-                addBox(); // añade recuadro pequeño centrado
+                addBox();
             }
             if (editingMode) {
                 editingBadge.classList.remove('hidden');
@@ -1178,9 +1210,12 @@ function showCropItem(index) {
                 cancelEditBtn.disabled = true;
             }
             updateUI();
-            // Mostrar factores de escala en consola para depuración
-            const sc = getScaleFactors();
-            console.log(`[DEBUG] scaleX: ${sc.scaleX}, scaleY: ${sc.scaleY}`);
+            // Reconstruir cuadrícula con la división seleccionada
+            const divs = parseInt(gridDivisionsSelect.value);
+            buildGrid(divs);
+            if (gridVisible) {
+                gridOverlay.classList.add('active');
+            }
         };
         if (cropImage.complete) cropImage.onload();
     };
@@ -1223,7 +1258,6 @@ cropConfirmBtn.addEventListener('click', async function() {
     ctx.drawImage(originalImage, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
     const croppedDataUrl = canvas.toDataURL('image/png');
 
-    // Mostrar en modal
     modalImage.src = croppedDataUrl;
     modalInfo.innerHTML = `
         <p><strong>Página:</strong> ${imageItems[currentIndex].page || '-'} | <strong>Tablero:</strong> ${activeBoxIndex !== -1 ? activeBoxIndex+1 : '?'}</p>
@@ -1437,6 +1471,9 @@ uploadForm.addEventListener('submit', async function(e) {
 
         cropSection.classList.remove('hidden');
         currentIndex = 0;
+        // Construir cuadrícula inicial
+        const divs = parseInt(gridDivisionsSelect.value);
+        buildGrid(divs);
         showCropItem(currentIndex);
 
         uploadBtn.disabled = false;
