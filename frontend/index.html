@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Cuadrícula de precisión</title>
+    <title>Chess PDF to FEN - Cuadrícula precisa + Deshacer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -132,13 +132,11 @@
             max-height: none;
         }
 
-        /* ===== CUADRÍCULA DINÁMICA ===== */
+        /* ===== CUADRÍCULA DINÁMICA (tamaño ajustado a la imagen) ===== */
         .grid-overlay {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
             pointer-events: none;
             z-index: 5;
             display: none;
@@ -288,8 +286,16 @@
         .thumbnail-board { width: 150px; height: 150px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; background: white; }
         .board-cell { min-width: 160px; text-align: center; }
         .action-cell { white-space: nowrap; }
-        .btn-copy { background: transparent; border: none; cursor: pointer; font-size: 1.2rem; padding: 0.2rem 0.5rem; }
+        .btn-copy, .btn-cut {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.2rem 0.5rem;
+            transition: 0.2s;
+        }
         .btn-copy:hover { transform: scale(1.2); }
+        .btn-cut:hover { color: #e74c3c; transform: scale(1.1); }
         .btn-toggle-turn { background: #f39c12; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-toggle-turn:hover { background: #e67e22; }
         .btn-export { background: #2c3e50; color: white; border: none; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 1rem; }
@@ -333,6 +339,14 @@
             color: white;
         }
         .editing-badge { background: #9b59b6; }
+
+        .undo-redo-bar {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin: 10px 0;
+        }
+        .undo-redo-bar .btn { min-width: 60px; }
 
         /* Modal */
         .modal {
@@ -391,7 +405,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Cuadrícula de precisión ajustable para alinear recortes.</p>
+    <p class="subtitle">Cuadrícula ajustable, copiar/cortar FEN y deshacer/rehacer.</p>
 
     <!-- PASO 1 -->
     <div class="card">
@@ -430,6 +444,7 @@
                 <option value="10" selected>10×10</option>
                 <option value="20">20×20</option>
                 <option value="30">30×30</option>
+                <option value="50">50×50</option>
                 <option value="100">100×100</option>
             </select>
         </div>
@@ -446,7 +461,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Ajusta la densidad de la cuadrícula con el selector. Las líneas verdes te ayudarán a alinear los recuadros.
+            💡 Ajusta la densidad de la cuadrícula. Las líneas verdes ayudan a alinear.
         </p>
     </div>
 
@@ -454,6 +469,10 @@
     <div id="resultContainer" class="hidden">
         <div class="card">
             <div class="card-header"><i class="fas fa-list"></i> Resultados</div>
+            <div class="undo-redo-bar">
+                <button class="btn btn-outline btn-sm" id="undoBtn" disabled><i class="fas fa-undo"></i> Deshacer</button>
+                <button class="btn btn-outline btn-sm" id="redoBtn" disabled><i class="fas fa-redo"></i> Rehacer</button>
+            </div>
             <div id="result"></div>
         </div>
     </div>
@@ -495,7 +514,7 @@
 
 <script>
 // ============================================================
-//  VERSIÓN CON CUADRÍCULA DE PRECISIÓN (DENSIDAD AJUSTABLE)
+//  VERSIÓN FINAL: CUADRÍCULA CORREGIDA + DESHACER/REHACER
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
@@ -512,6 +531,10 @@ let templatesSaved = false;
 let processingAll = false;
 let editingMode = false;
 let gridVisible = false;
+
+// --- Historial para deshacer/rehacer (eliminaciones) ---
+let undoStack = [];
+let redoStack = [];
 
 // --- DOM ---
 const cropSection = document.getElementById('cropSection');
@@ -550,6 +573,9 @@ const modal = document.getElementById('cropModal');
 const modalImage = document.getElementById('modalImage');
 const modalInfo = document.getElementById('modalInfo');
 const modalClose = document.getElementById('modalClose');
+
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
 
 // ============================================================
 //  FUNCIONES DE ESCALA
@@ -614,18 +640,16 @@ function showNotification(msg) {
 }
 
 // ============================================================
-//  CUADRÍCULA DE PRECISIÓN (DINÁMICA)
+//  CUADRÍCULA: CONSTRUCCIÓN Y ACTUALIZACIÓN DE TAMAÑO
 // ============================================================
 function buildGrid(divisions) {
     gridOverlay.innerHTML = '';
     for (let i = 1; i < divisions; i++) {
         const pos = (i / divisions) * 100;
-        // Horizontal
         const hLine = document.createElement('div');
         hLine.className = 'grid-line horizontal';
         hLine.style.top = pos + '%';
         gridOverlay.appendChild(hLine);
-        // Vertical
         const vLine = document.createElement('div');
         vLine.className = 'grid-line vertical';
         vLine.style.left = pos + '%';
@@ -633,13 +657,24 @@ function buildGrid(divisions) {
     }
 }
 
-// Reconstruir cuadrícula al cambiar el selector
+function updateGridOverlaySize() {
+    const rect = cropImage.getBoundingClientRect();
+    const containerRect = cropContainer.getBoundingClientRect();
+    // Posicionar el overlay exactamente sobre la imagen
+    const offsetX = rect.left - containerRect.left;
+    const offsetY = rect.top - containerRect.top;
+    gridOverlay.style.top = offsetY + 'px';
+    gridOverlay.style.left = offsetX + 'px';
+    gridOverlay.style.width = rect.width + 'px';
+    gridOverlay.style.height = rect.height + 'px';
+}
+
+// Reconstruir cuadrícula al cambiar selector y actualizar tamaño
 gridDivisionsSelect.addEventListener('change', function() {
     const divs = parseInt(this.value);
     buildGrid(divs);
-    if (gridVisible) {
-        gridOverlay.classList.add('active');
-    }
+    if (gridVisible) gridOverlay.classList.add('active');
+    updateGridOverlaySize();
 });
 
 // ============================================================
@@ -811,7 +846,7 @@ function updateUI() {
 }
 
 // ============================================================
-//  ARRASTRE Y REDIMENSIÓN
+//  ARRASTRE Y REDIMENSIÓN (sin cambios)
 // ============================================================
 let dragData = null;
 
@@ -1001,6 +1036,7 @@ toggleGridBtn.addEventListener('click', function() {
     gridVisible = !gridVisible;
     gridOverlay.classList.toggle('active', gridVisible);
     toggleGridBtn.innerHTML = gridVisible ? '<i class="fas fa-th"></i> Ocultar guías' : '<i class="fas fa-th"></i> Mostrar guías';
+    if (gridVisible) updateGridOverlaySize();
 });
 
 // ============================================================
@@ -1181,7 +1217,7 @@ applyAllBtn.addEventListener('click', async function() {
 });
 
 // ============================================================
-//  MOSTRAR IMAGEN EN RECORTE
+//  MOSTRAR IMAGEN EN RECORTE (con actualización de cuadrícula)
 // ============================================================
 function showCropItem(index) {
     if (index < 0 || index >= imageItems.length) {
@@ -1215,6 +1251,7 @@ function showCropItem(index) {
             buildGrid(divs);
             if (gridVisible) {
                 gridOverlay.classList.add('active');
+                updateGridOverlaySize();
             }
         };
         if (cropImage.complete) cropImage.onload();
@@ -1396,6 +1433,9 @@ uploadForm.addEventListener('submit', async function(e) {
     resultContainer.classList.add('hidden');
     exportSection.style.display = 'none';
     updateUI();
+    undoStack = [];
+    redoStack = [];
+    updateUndoRedoButtons();
 
     try {
         const pagesStr = pagesInput.value.trim() || '1';
@@ -1471,7 +1511,6 @@ uploadForm.addEventListener('submit', async function(e) {
 
         cropSection.classList.remove('hidden');
         currentIndex = 0;
-        // Construir cuadrícula inicial
         const divs = parseInt(gridDivisionsSelect.value);
         buildGrid(divs);
         showCropItem(currentIndex);
@@ -1487,13 +1526,70 @@ uploadForm.addEventListener('submit', async function(e) {
 });
 
 // ============================================================
-//  MOSTRAR RESULTADOS
+//  DESHACER / REHACER
+// ============================================================
+function updateUndoRedoButtons() {
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+}
+
+// Función para eliminar una fila con historial
+function deleteResult(index) {
+    if (index < 0 || index >= allResults.length) return;
+    const deleted = allResults[index];
+    // Guardar acción en undoStack
+    undoStack.push({ type: 'delete', data: deleted, index: index });
+    // Limpiar redoStack
+    redoStack = [];
+    // Eliminar del array
+    allResults.splice(index, 1);
+    // Actualizar vista
+    showResults();
+    updateUndoRedoButtons();
+    showNotification('Fila eliminada');
+}
+
+// Deshacer
+undoBtn.addEventListener('click', function() {
+    if (undoStack.length === 0) return;
+    const action = undoStack.pop();
+    // Reinsertar en la posición original
+    allResults.splice(action.index, 0, action.data);
+    // Guardar en redoStack para rehacer
+    redoStack.push(action);
+    showResults();
+    updateUndoRedoButtons();
+    showNotification('Deshecho');
+});
+
+// Rehacer
+redoBtn.addEventListener('click', function() {
+    if (redoStack.length === 0) return;
+    const action = redoStack.pop();
+    // Eliminar nuevamente
+    const idx = allResults.indexOf(action.data);
+    if (idx !== -1) {
+        allResults.splice(idx, 1);
+        // Guardar en undoStack para poder deshacer el rehacer
+        undoStack.push(action);
+        showResults();
+        updateUndoRedoButtons();
+        showNotification('Rehecho');
+    } else {
+        // Si no se encuentra, limpiar redoStack
+        redoStack = [];
+        updateUndoRedoButtons();
+    }
+});
+
+// ============================================================
+//  MOSTRAR RESULTADOS (con botones copiar/cortar)
 // ============================================================
 function showResults() {
     resultContainer.classList.remove('hidden');
     resultDiv.innerHTML = '';
     if (allResults.length === 0) {
-        resultDiv.innerHTML = '<p>No se obtuvieron resultados.</p>';
+        resultDiv.innerHTML = '<p>No hay resultados.</p>';
         return;
     }
 
@@ -1526,7 +1622,10 @@ function showResults() {
             </td>
             <td>${!isError ? `<button class="btn-toggle-turn" data-fen="${fen}" data-index="${i}">🔄</button>` : '-'}</td>
             <td class="action-cell">
-                ${!isError ? `<button class="btn-copy" data-fen="${fen}" data-index="${i}" title="Copiar FEN">✂️</button>` : ''}
+                ${!isError ? `
+                    <button class="btn-copy" data-fen="${fen}" data-index="${i}" title="Copiar FEN"><i class="fas fa-copy"></i></button>
+                    <button class="btn-cut" data-index="${i}" title="Cortar (eliminar fila)"><i class="fas fa-cut"></i></button>
+                ` : ''}
                 <button class="btn btn-warning btn-sm edit-btn" data-index="${i}" title="Editar">✏️</button>
                 <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte">🔍</button>
             </td>
@@ -1540,6 +1639,7 @@ function showResults() {
 
     if (totalSuccess > 0) exportSection.style.display = 'block';
 
+    // Eventos de la tabla
     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
@@ -1552,7 +1652,6 @@ function showResults() {
                 const row = this.closest('tr');
                 row.querySelector('.fen-cell').textContent = newFen;
                 this.setAttribute('data-fen', newFen);
-                row.querySelector('.btn-copy').setAttribute('data-fen', newFen);
                 allResults[idx].fen = newFen;
             }
         });
@@ -1561,7 +1660,18 @@ function showResults() {
     document.querySelectorAll('.btn-copy').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
-            if (fen) navigator.clipboard.writeText(fen).then(() => showNotification('FEN copiado'));
+            if (fen) {
+                navigator.clipboard.writeText(fen).then(() => showNotification('FEN copiado al portapapeles'));
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-cut').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.index);
+            if (!isNaN(idx)) {
+                deleteResult(idx);
+            }
         });
     });
 
@@ -1670,6 +1780,25 @@ fileInput.addEventListener('change', function() {
     }
     uploadBtn.disabled = false;
 });
+
+// ============================================================
+//  ACTUALIZAR TAMAÑO DE CUADRÍCULA AL REDIMENSIONAR
+// ============================================================
+window.addEventListener('resize', function() {
+    if (gridVisible) {
+        updateGridOverlaySize();
+    }
+});
+
+// También al hacer scroll en el contenedor, la posición del overlay no cambia porque es relativa al contenedor,
+// pero si la imagen se mueve dentro del contenedor (por ejemplo, centrado), la posición relativa es estable.
+// Si la imagen está centrada, el offset se mantiene.
+
+// ============================================================
+//  INICIO: construir cuadrícula por defecto
+// ============================================================
+const defaultDivs = parseInt(gridDivisionsSelect.value);
+buildGrid(defaultDivs);
 </script>
 </body>
 </html>
