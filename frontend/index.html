@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Múltiples tableros</title>
+    <title>Chess PDF to FEN - Con diagnóstico</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ===== ESTILOS (idénticos a la versión anterior) ===== */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -283,12 +282,12 @@
         }
         .editing-badge { background: #9b59b6; }
 
-        /* ===== MODAL ===== */
+        /* Modal para diagnóstico */
         .modal {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.85);
             display: none;
             align-items: center;
             justify-content: center;
@@ -298,15 +297,15 @@
         .modal.active { display: flex; }
         .modal-content {
             background: white;
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 95%;
+            max-height: 95%;
             border-radius: 12px;
             padding: 20px;
             overflow: auto;
             position: relative;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
-        .modal-content img { max-width: 100%; max-height: 80vh; display: block; margin: 0 auto; }
+        .modal-content img { max-width: 100%; max-height: 70vh; display: block; margin: 0 auto; }
         .modal-close {
             position: absolute;
             top: 10px; right: 15px;
@@ -317,19 +316,43 @@
             border: none;
         }
         .modal-close:hover { color: #e74c3c; }
+        .modal-info {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #555;
+            text-align: center;
+        }
+        .modal-info .error-text { color: #e74c3c; font-weight: bold; }
+
+        /* Barra de progreso en la notificación */
+        .progress-container {
+            margin-top: 8px;
+            width: 100%;
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+            overflow: hidden;
+            height: 6px;
+        }
+        .progress-bar {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s;
+        }
 
         @media (max-width: 768px) {
             #cropContainer { height: 360px; }
-            .resize-handle { width: 22px; height: 22px; }
-            .resize-nw, .resize-ne { top: -11px; }
-            .resize-sw, .resize-se { bottom: -11px; }
-            .resize-nw, .resize-sw { left: -11px; }
-            .resize-ne, .resize-se { right: -11px; }
+            .resize-handle { width: 26px; height: 26px; }
+            .resize-nw, .resize-ne { top: -13px; }
+            .resize-sw, .resize-se { bottom: -13px; }
+            .resize-nw, .resize-sw { left: -13px; }
+            .resize-ne, .resize-se { right: -13px; }
             .btn { font-size: 0.95rem; padding: 12px 14px; }
             .crop-controls .btn { flex: 1 1 100%; }
+            .app-container { padding: 12px; }
+            .modal-content { padding: 12px; }
         }
         @media (max-width: 480px) {
-            .app-container { padding: 12px; }
             #cropContainer { height: 280px; }
             h1 { font-size: 1.5rem; }
         }
@@ -338,7 +361,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Extrae múltiples tableros por página (hasta 60 tableros en total). Arrastra y redimensiona los recuadros.</p>
+    <p class="subtitle">Con diagnóstico visual: verifica qué imagen se envía a Chessvision.ai</p>
 
     <!-- PASO 1 -->
     <div class="card">
@@ -383,7 +406,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Ajusta cada recuadro arrastrando o usando los tiradores. Guarda plantillas y procesa el resto.
+            💡 Ajusta cada recuadro. Guarda plantillas y procesa el resto.
         </p>
     </div>
 
@@ -418,21 +441,33 @@
     </div>
 </div>
 
-<!-- MODAL -->
+<!-- MODAL PARA DIAGNÓSTICO -->
 <div class="modal" id="cropModal">
     <div class="modal-content">
         <button class="modal-close" id="modalClose">&times;</button>
-        <h4 style="margin-bottom:10px;">Recorte enviado</h4>
+        <h4 style="margin-bottom:10px;">🔍 Recorte enviado a Chessvision.ai</h4>
         <img id="modalImage" src="" alt="Recorte">
-        <p style="margin-top:10px;font-size:0.9rem;color:#555;" id="modalInfo"></p>
+        <div class="modal-info" id="modalInfo">
+            <p><strong>Página:</strong> <span id="modalPage">-</span> | <strong>Tablero:</strong> <span id="modalBoard">-</span></p>
+            <p id="modalError" class="error-text"></p>
+            <p style="font-size:0.8rem;color:#888;margin-top:5px;">
+                👆 Si ves que el recorte NO muestra el tablero completo, ajusta el recuadro en la edición.
+            </p>
+        </div>
     </div>
 </div>
 
-<div class="notification" id="notification"><i class="fas fa-check-circle"></i> <span id="notifText">Listo</span></div>
+<div class="notification" id="notification">
+    <i class="fas fa-check-circle"></i>
+    <span id="notifText">Listo</span>
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+</div>
 
 <script>
 // ============================================================
-//  SISTEMA COMPLETO CON ARRASTRE FUNCIONAL
+//  VERSIÓN CON DIAGNÓSTICO Y MEJORAS PARA MÓVIL
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
@@ -441,14 +476,13 @@ const MAX_DISPLAY_WIDTH = 900;
 let originalImage = null;
 let cropBoxes = [];
 let activeBoxIndex = -1;
-let imageItems = [];          // { dataUrl, originalName, page }
+let imageItems = [];
 let currentIndex = 0;
-let allResults = [];          // array de { page, originalName, boardIndex, fen, thumbnail, error, cropDataURL }
+let allResults = [];
 let savedTemplates = [];
 let templatesSaved = false;
 let processingAll = false;
 let editingMode = false;
-let editingPageIndex = -1;
 
 // --- DOM ---
 const cropSection = document.getElementById('cropSection');
@@ -479,18 +513,29 @@ const resultContainer = document.getElementById('resultContainer');
 const exportSection = document.getElementById('exportSection');
 const notif = document.getElementById('notification');
 const notifText = document.getElementById('notifText');
+const progressBar = document.getElementById('progressBar');
+const progressContainer = document.getElementById('progressContainer');
 
 // Modal
 const modal = document.getElementById('cropModal');
 const modalImage = document.getElementById('modalImage');
-const modalInfo = document.getElementById('modalInfo');
+const modalPage = document.getElementById('modalPage');
+const modalBoard = document.getElementById('modalBoard');
+const modalError = document.getElementById('modalError');
 const modalClose = document.getElementById('modalClose');
 
 // ============================================================
 //  FUNCIONES AUXILIARES
 // ============================================================
-function showNotification(msg) {
+function showNotification(msg, progress) {
     notifText.textContent = msg;
+    if (progress !== undefined) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = Math.min(100, progress) + '%';
+    } else {
+        progressContainer.style.display = 'none';
+        progressBar.style.width = '0%';
+    }
     notif.classList.add('show');
     setTimeout(() => notif.classList.remove('show'), 4000);
 }
@@ -531,10 +576,8 @@ function getDisplaySize() {
 }
 
 // ============================================================
-//  GESTIÓN DE RECUADROS CON ARRASTRE Y REDIMENSIÓN
+//  GESTIÓN DE RECUADROS CON ARRASTRE (COMPLETO)
 // ============================================================
-
-// --- Variables de arrastre ---
 let dragData = null;
 
 function createBoxElement(x, y, w, h, label) {
@@ -546,17 +589,14 @@ function createBoxElement(x, y, w, h, label) {
     box.style.height = h + 'px';
     box.dataset.index = cropBoxes.length;
 
-    // Etiqueta
     const lbl = document.createElement('span');
     lbl.className = 'crop-label';
     lbl.textContent = label || `#${cropBoxes.length+1}`;
     box.appendChild(lbl);
 
-    // Botón cerrar
     const close = document.createElement('span');
     close.className = 'crop-close';
     close.textContent = '✕';
-    close.title = 'Eliminar este recuadro';
     close.addEventListener('mousedown', (e) => e.stopPropagation());
     close.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -565,7 +605,6 @@ function createBoxElement(x, y, w, h, label) {
     });
     box.appendChild(close);
 
-    // Tiradores
     const dirs = ['nw', 'ne', 'sw', 'se'];
     dirs.forEach(d => {
         const handle = document.createElement('div');
@@ -573,7 +612,6 @@ function createBoxElement(x, y, w, h, label) {
         box.appendChild(handle);
     });
 
-    // --- EVENTOS DE ARRASTRE (ratón y táctil) ---
     box.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('resize-handle') || e.target.classList.contains('crop-close')) return;
         activateBox(box);
@@ -673,7 +711,7 @@ function updateUI() {
     applyAllBtn.disabled = !hasSaved;
     cropConfirmBtn.disabled = !hasBoxes;
     statusBar.textContent = hasBoxes ?
-        `🎯 ${cropBoxes.length} recuadros activos. Arrastra o redimensiona.` :
+        `🎯 ${cropBoxes.length} recuadros activos.` :
         '🎯 Haz clic en "Añadir recuadro" para cada tablero.';
     if (!hasBoxes) delBoxBtn.disabled = true;
     if (editingMode) {
@@ -686,9 +724,8 @@ function updateUI() {
 }
 
 // ============================================================
-//  FUNCIONES DE ARRASTRE Y REDIMENSIÓN (restauradas)
+//  FUNCIONES DE ARRASTRE Y REDIMENSIÓN
 // ============================================================
-
 function startDrag(e, box) {
     const idx = parseInt(box.dataset.index);
     const data = cropBoxes[idx];
@@ -696,12 +733,9 @@ function startDrag(e, box) {
     e.preventDefault();
     const pos = getPointerPosition(e);
     dragData = {
-        box: box,
-        index: idx,
-        startX: pos.clientX,
-        startY: pos.clientY,
-        origX: data.x,
-        origY: data.y,
+        box: box, index: idx,
+        startX: pos.clientX, startY: pos.clientY,
+        origX: data.x, origY: data.y,
         mode: 'drag'
     };
     document.addEventListener('mousemove', onDragMove);
@@ -715,12 +749,9 @@ function startDragTouch(e, box) {
     e.preventDefault();
     const pos = getPointerPosition(e);
     dragData = {
-        box: box,
-        index: idx,
-        startX: pos.clientX,
-        startY: pos.clientY,
-        origX: data.x,
-        origY: data.y,
+        box: box, index: idx,
+        startX: pos.clientX, startY: pos.clientY,
+        origX: data.x, origY: data.y,
         mode: 'drag'
     };
     document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
@@ -734,16 +765,11 @@ function startResize(e, box, dir) {
     e.preventDefault();
     const pos = getPointerPosition(e);
     dragData = {
-        box: box,
-        index: idx,
-        startX: pos.clientX,
-        startY: pos.clientY,
-        origX: data.x,
-        origY: data.y,
-        origW: data.w,
-        origH: data.h,
-        dir: dir,
-        mode: 'resize'
+        box: box, index: idx,
+        startX: pos.clientX, startY: pos.clientY,
+        origX: data.x, origY: data.y,
+        origW: data.w, origH: data.h,
+        dir: dir, mode: 'resize'
     };
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
@@ -756,16 +782,11 @@ function startResizeTouch(e, box, dir) {
     e.preventDefault();
     const pos = getPointerPosition(e);
     dragData = {
-        box: box,
-        index: idx,
-        startX: pos.clientX,
-        startY: pos.clientY,
-        origX: data.x,
-        origY: data.y,
-        origW: data.w,
-        origH: data.h,
-        dir: dir,
-        mode: 'resize'
+        box: box, index: idx,
+        startX: pos.clientX, startY: pos.clientY,
+        origX: data.x, origY: data.y,
+        origW: data.w, origH: data.h,
+        dir: dir, mode: 'resize'
     };
     document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
     document.addEventListener('touchend', onDragEndTouch, { passive: false });
@@ -800,40 +821,26 @@ function processDrag(clientX, clientY) {
         data.x = newX;
         data.y = newY;
     } else if (dragData.mode === 'resize') {
-        let newW = dragData.origW;
-        let newH = dragData.origH;
-        let newX = dragData.origX;
-        let newY = dragData.origY;
-        const dir = dragData.dir;
-        switch (dir) {
+        let newW = dragData.origW, newH = dragData.origH;
+        let newX = dragData.origX, newY = dragData.origY;
+        switch (dragData.dir) {
             case 'nw':
-                newW = dragData.origW - dx;
-                newH = dragData.origH - dy;
-                newX = dragData.origX + dx;
-                newY = dragData.origY + dy;
-                break;
+                newW = dragData.origW - dx; newH = dragData.origH - dy;
+                newX = dragData.origX + dx; newY = dragData.origY + dy; break;
             case 'ne':
-                newW = dragData.origW + dx;
-                newH = dragData.origH - dy;
-                newY = dragData.origY + dy;
-                break;
+                newW = dragData.origW + dx; newH = dragData.origH - dy;
+                newY = dragData.origY + dy; break;
             case 'sw':
-                newW = dragData.origW - dx;
-                newH = dragData.origH + dy;
-                newX = dragData.origX + dx;
-                break;
+                newW = dragData.origW - dx; newH = dragData.origH + dy;
+                newX = dragData.origX + dx; break;
             case 'se':
-                newW = dragData.origW + dx;
-                newH = dragData.origH + dy;
-                break;
+                newW = dragData.origW + dx; newH = dragData.origH + dy; break;
         }
         if (newW >= 30 && newX >= 0 && newX + newW <= size.w) {
-            data.w = newW;
-            data.x = newX;
+            data.w = newW; data.x = newX;
         }
         if (newH >= 30 && newY >= 0 && newY + newH <= size.h) {
-            data.h = newH;
-            data.y = newY;
+            data.h = newH; data.y = newY;
         }
     }
     data.element.style.left = data.x + 'px';
@@ -855,7 +862,7 @@ function onDragEndTouch(e) {
 }
 
 // ============================================================
-//  BOTONES DE RECUADROS
+//  BOTONES
 // ============================================================
 addBoxBtn.addEventListener('click', function() {
     if (!originalImage) return;
@@ -898,7 +905,7 @@ saveTemplatesBtn.addEventListener('click', function() {
 });
 
 // ============================================================
-//  APLICAR PLANTILLAS A UNA IMAGEN
+//  APLICAR PLANTILLAS CON DIAGNÓSTICO
 // ============================================================
 function applySavedTemplatesToCurrentImage() {
     clearBoxes();
@@ -915,7 +922,7 @@ function applySavedTemplatesToCurrentImage() {
     updateUI();
 }
 
-async function applyTemplatesToImage(imageDataUrl, originalName, page) {
+async function applyTemplatesToImage(imageDataUrl, originalName, page, totalItems, currentItem) {
     if (savedTemplates.length === 0 || !templatesSaved) return [];
     const img = new Image();
     await new Promise((resolve) => {
@@ -927,9 +934,9 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
     const resultsList = [];
     for (let idx = 0; idx < savedTemplates.length; idx++) {
         const t = savedTemplates[idx];
-        // Margen del 5%
-        const marginX = t.w * origW * 0.05;
-        const marginY = t.h * origH * 0.05;
+        // Margen del 10% (aumentado para mejor detección)
+        const marginX = t.w * origW * 0.10;
+        const marginY = t.h * origH * 0.10;
         const cropOrigX = Math.max(0, t.x * origW - marginX);
         const cropOrigY = Math.max(0, t.y * origH - marginY);
         const cropOrigW = Math.min(origW, t.w * origW + marginX * 2);
@@ -942,7 +949,14 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page) {
         canvas.height = outH;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
-        const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+        // Usar PNG para mejor calidad
+        const croppedDataUrl = canvas.toDataURL('image/png');
+
+        // Mostrar progreso
+        const progress = ((currentItem + (idx / savedTemplates.length)) / totalItems) * 100;
+        showNotification(`⏳ Procesando página ${page}, tablero ${idx+1}...`, progress);
+
         try {
             const response = await fetch('/process-cropped', {
                 method: 'POST',
@@ -999,10 +1013,17 @@ applyAllBtn.addEventListener('click', async function() {
 
     allResults = [];
     let totalProcessed = 0, totalErrors = 0;
+    const totalItems = imageItems.length * savedTemplates.length;
 
     for (let i = 0; i < imageItems.length; i++) {
         const item = imageItems[i];
-        const boardResults = await applyTemplatesToImage(item.dataUrl, item.originalName, item.page);
+        const boardResults = await applyTemplatesToImage(
+            item.dataUrl,
+            item.originalName,
+            item.page,
+            totalItems,
+            i * savedTemplates.length
+        );
         for (const r of boardResults) {
             allResults.push({
                 page: item.page,
@@ -1015,9 +1036,6 @@ applyAllBtn.addEventListener('click', async function() {
             });
             if (r.fen) totalProcessed++;
             else totalErrors++;
-        }
-        if (i % 2 === 0 || i === imageItems.length - 1) {
-            applyAllBtn.textContent = `⏳ ${i+1}/${imageItems.length}...`;
         }
     }
 
@@ -1087,9 +1105,9 @@ cropConfirmBtn.addEventListener('click', async function() {
     const origY = boxData.y * scaleY;
     const origW = boxData.w * scaleX;
     const origH = boxData.h * scaleY;
-    // Margen 5%
-    const marginX = origW * 0.05;
-    const marginY = origH * 0.05;
+    // Margen 10%
+    const marginX = origW * 0.10;
+    const marginY = origH * 0.10;
     const cropOrigX = Math.max(0, origX - marginX);
     const cropOrigY = Math.max(0, origY - marginY);
     const cropOrigW = Math.min(originalImage.width, origW + marginX * 2);
@@ -1102,7 +1120,14 @@ cropConfirmBtn.addEventListener('click', async function() {
     canvas.height = outH;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(originalImage, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
-    const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const croppedDataUrl = canvas.toDataURL('image/png');
+
+    // Mostrar en modal para diagnóstico
+    modalImage.src = croppedDataUrl;
+    modalPage.textContent = imageItems[currentIndex].page || '-';
+    modalBoard.textContent = activeBoxIndex !== -1 ? activeBoxIndex + 1 : '?';
+    modalError.textContent = '⏳ Procesando...';
+    modal.classList.add('active');
 
     cropConfirmBtn.disabled = true;
     cropConfirmBtn.textContent = '⏳ Procesando...';
@@ -1139,6 +1164,8 @@ cropConfirmBtn.addEventListener('click', async function() {
                     cropDataURL: croppedDataUrl
                 });
             }
+            modalError.textContent = '✅ FEN obtenido correctamente';
+            modalError.style.color = '#27ae60';
             showNotification('✅ Resultado actualizado');
             if (editingMode) {
                 editingMode = false;
@@ -1147,10 +1174,16 @@ cropConfirmBtn.addEventListener('click', async function() {
             }
             showResults();
             showCropItem(currentIndex);
+            // Cerrar modal después de 2 segundos
+            setTimeout(() => modal.classList.remove('active'), 2000);
         } else {
+            modalError.textContent = '❌ Error: ' + (data.error || 'No se pudo obtener FEN');
+            modalError.style.color = '#e74c3c';
             showNotification('❌ Error: ' + (data.error || 'No se pudo obtener FEN'));
         }
     } catch (error) {
+        modalError.textContent = '❌ Error de red: ' + error.message;
+        modalError.style.color = '#e74c3c';
         showNotification('❌ Error de red: ' + error.message);
     }
     cropConfirmBtn.disabled = false;
@@ -1310,7 +1343,7 @@ uploadForm.addEventListener('submit', async function(e) {
 });
 
 // ============================================================
-//  MOSTRAR RESULTADOS
+//  MOSTRAR RESULTADOS CON DIAGNÓSTICO
 // ============================================================
 function showResults() {
     resultContainer.classList.remove('hidden');
@@ -1351,7 +1384,7 @@ function showResults() {
             <td class="action-cell">
                 ${!isError ? `<button class="btn-copy" data-fen="${fen}" data-index="${i}" title="Copiar FEN">✂️</button>` : ''}
                 <button class="btn btn-warning btn-sm edit-btn" data-index="${i}" title="Editar">✏️</button>
-                <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte">👁️</button>
+                <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte enviado">🔍</button>
             </td>
         </tr>`;
     }
@@ -1400,7 +1433,6 @@ function showResults() {
                 return;
             }
             editingMode = true;
-            editingPageIndex = pageIndex;
             currentIndex = pageIndex;
             cropSection.classList.remove('hidden');
             showCropItem(pageIndex);
@@ -1420,7 +1452,10 @@ function showResults() {
                 return;
             }
             modalImage.src = result.cropDataURL;
-            modalInfo.textContent = `Página ${result.page}, Tablero ${result.boardIndex+1}`;
+            modalPage.textContent = result.page || '-';
+            modalBoard.textContent = result.boardIndex !== undefined ? result.boardIndex + 1 : '?';
+            modalError.textContent = result.error ? '❌ ' + result.error : '✅ FEN obtenido correctamente';
+            modalError.style.color = result.error ? '#e74c3c' : '#27ae60';
             modal.classList.add('active');
         });
     });
