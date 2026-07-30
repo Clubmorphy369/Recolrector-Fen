@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Chess PDF to FEN - Con diagnóstico</title>
+    <title>Chess PDF to FEN - Con guías de alineación</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -131,6 +131,40 @@
             max-width: 100%;
             max-height: none;
         }
+
+        /* ===== GUÍAS DE ALINEACIÓN (cuadrícula 3x3 verde) ===== */
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+        }
+        .grid-overlay.active { display: block; }
+        .grid-line {
+            position: absolute;
+            background: rgba(46, 204, 113, 0.5);
+            pointer-events: none;
+        }
+        .grid-line.horizontal {
+            left: 0;
+            width: 100%;
+            height: 1px;
+        }
+        .grid-line.vertical {
+            top: 0;
+            height: 100%;
+            width: 1px;
+        }
+        .grid-line.h1 { top: 33.33%; }
+        .grid-line.h2 { top: 66.66%; }
+        .grid-line.v1 { left: 33.33%; }
+        .grid-line.v2 { left: 66.66%; }
+
+        /* ===== RECUADROS ===== */
         .crop-box {
             position: absolute;
             border: 3px solid #3498db;
@@ -162,6 +196,19 @@
             white-space: nowrap;
         }
         .crop-box.active .crop-label { background: #9b59b6; }
+        .crop-box .crop-size {
+            position: absolute;
+            bottom: -22px;
+            right: 4px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 0.6rem;
+            padding: 1px 4px;
+            border-radius: 4px;
+            pointer-events: none;
+            font-family: monospace;
+            white-space: nowrap;
+        }
         .crop-box .crop-close {
             position: absolute;
             top: -22px;
@@ -282,7 +329,7 @@
         }
         .editing-badge { background: #9b59b6; }
 
-        /* Modal para diagnóstico */
+        /* Modal */
         .modal {
             position: fixed;
             top: 0; left: 0;
@@ -316,29 +363,7 @@
             border: none;
         }
         .modal-close:hover { color: #e74c3c; }
-        .modal-info {
-            margin-top: 10px;
-            font-size: 0.9rem;
-            color: #555;
-            text-align: center;
-        }
-        .modal-info .error-text { color: #e74c3c; font-weight: bold; }
-
-        /* Barra de progreso en la notificación */
-        .progress-container {
-            margin-top: 8px;
-            width: 100%;
-            background: rgba(255,255,255,0.3);
-            border-radius: 10px;
-            overflow: hidden;
-            height: 6px;
-        }
-        .progress-bar {
-            height: 100%;
-            background: white;
-            width: 0%;
-            transition: width 0.3s;
-        }
+        .modal-info { margin-top: 10px; font-size: 0.9rem; color: #555; text-align: center; }
 
         @media (max-width: 768px) {
             #cropContainer { height: 360px; }
@@ -361,7 +386,7 @@
 <body>
 <div class="app-container">
     <h1><i class="fas fa-chess-board"></i> Chess PDF to FEN</h1>
-    <p class="subtitle">Con diagnóstico visual: verifica qué imagen se envía a Chessvision.ai</p>
+    <p class="subtitle">Con guías de alineación verdes y recuadro pequeño para móvil.</p>
 
     <!-- PASO 1 -->
     <div class="card">
@@ -387,15 +412,22 @@
             <span class="badge" id="imageProgress">Imagen 1 de 1</span>
             <span class="badge editing-badge hidden" id="editingBadge">✏️ Editando</span>
         </div>
-        <div class="status-bar" id="statusBar">🎯 Añade recuadros para cada tablero en la primera página.</div>
+        <div class="status-bar" id="statusBar">🎯 Añade recuadros para cada tablero.</div>
         <div class="template-controls">
             <button class="btn btn-success btn-sm" id="addBoxBtn"><i class="fas fa-plus"></i> Añadir recuadro</button>
             <button class="btn btn-danger btn-sm" id="delBoxBtn" disabled><i class="fas fa-minus-circle"></i> Eliminar activo</button>
             <button class="btn btn-warning btn-sm" id="clearBoxesBtn"><i class="fas fa-trash"></i> Eliminar todos</button>
             <button class="btn btn-primary btn-sm" id="saveTemplatesBtn" disabled><i class="fas fa-save"></i> Guardar plantillas</button>
+            <button class="btn btn-outline btn-sm" id="toggleGridBtn"><i class="fas fa-th"></i> Mostrar guías</button>
         </div>
         <div id="cropContainer">
             <img id="cropImage" />
+            <div class="grid-overlay" id="gridOverlay">
+                <div class="grid-line horizontal h1"></div>
+                <div class="grid-line horizontal h2"></div>
+                <div class="grid-line vertical v1"></div>
+                <div class="grid-line vertical v2"></div>
+            </div>
         </div>
         <div class="crop-controls">
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
@@ -406,7 +438,7 @@
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
         </div>
         <p style="font-size:0.9rem;color:#555;text-align:center;margin-top:10px;">
-            💡 Ajusta cada recuadro. Guarda plantillas y procesa el resto.
+            💡 Usa las guías verdes (regla de tercios) para alinear los recuadros.
         </p>
     </div>
 
@@ -441,40 +473,28 @@
     </div>
 </div>
 
-<!-- MODAL PARA DIAGNÓSTICO -->
+<!-- MODAL -->
 <div class="modal" id="cropModal">
     <div class="modal-content">
         <button class="modal-close" id="modalClose">&times;</button>
-        <h4 style="margin-bottom:10px;">🔍 Recorte enviado a Chessvision.ai</h4>
+        <h4 style="margin-bottom:10px;">🔍 Recorte enviado</h4>
         <img id="modalImage" src="" alt="Recorte">
-        <div class="modal-info" id="modalInfo">
-            <p><strong>Página:</strong> <span id="modalPage">-</span> | <strong>Tablero:</strong> <span id="modalBoard">-</span></p>
-            <p id="modalError" class="error-text"></p>
-            <p style="font-size:0.8rem;color:#888;margin-top:5px;">
-                👆 Si ves que el recorte NO muestra el tablero completo, ajusta el recuadro en la edición.
-            </p>
-        </div>
+        <div class="modal-info" id="modalInfo"></div>
     </div>
 </div>
 
-<div class="notification" id="notification">
-    <i class="fas fa-check-circle"></i>
-    <span id="notifText">Listo</span>
-    <div class="progress-container" id="progressContainer">
-        <div class="progress-bar" id="progressBar"></div>
-    </div>
-</div>
+<div class="notification" id="notification"><i class="fas fa-check-circle"></i> <span id="notifText">Listo</span></div>
 
 <script>
 // ============================================================
-//  VERSIÓN CON DIAGNÓSTICO Y MEJORAS PARA MÓVIL
+//  VERSIÓN CON GUÍAS DE ALINEACIÓN Y RECUADRO PEQUEÑO
 // ============================================================
 
 const MAX_DISPLAY_WIDTH = 900;
 
 // --- Estado ---
 let originalImage = null;
-let cropBoxes = [];
+let cropBoxesData = [];
 let activeBoxIndex = -1;
 let imageItems = [];
 let currentIndex = 0;
@@ -483,6 +503,7 @@ let savedTemplates = [];
 let templatesSaved = false;
 let processingAll = false;
 let editingMode = false;
+let gridVisible = false;
 
 // --- DOM ---
 const cropSection = document.getElementById('cropSection');
@@ -502,6 +523,8 @@ const delBoxBtn = document.getElementById('delBoxBtn');
 const clearBoxesBtn = document.getElementById('clearBoxesBtn');
 const saveTemplatesBtn = document.getElementById('saveTemplatesBtn');
 const applyAllBtn = document.getElementById('applyAllBtn');
+const toggleGridBtn = document.getElementById('toggleGridBtn');
+const gridOverlay = document.getElementById('gridOverlay');
 
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
@@ -513,42 +536,49 @@ const resultContainer = document.getElementById('resultContainer');
 const exportSection = document.getElementById('exportSection');
 const notif = document.getElementById('notification');
 const notifText = document.getElementById('notifText');
-const progressBar = document.getElementById('progressBar');
-const progressContainer = document.getElementById('progressContainer');
 
-// Modal
 const modal = document.getElementById('cropModal');
 const modalImage = document.getElementById('modalImage');
-const modalPage = document.getElementById('modalPage');
-const modalBoard = document.getElementById('modalBoard');
-const modalError = document.getElementById('modalError');
+const modalInfo = document.getElementById('modalInfo');
 const modalClose = document.getElementById('modalClose');
 
 // ============================================================
-//  FUNCIONES AUXILIARES
+//  FUNCIONES DE ESCALA (corregidas)
 // ============================================================
-function showNotification(msg, progress) {
-    notifText.textContent = msg;
-    if (progress !== undefined) {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = Math.min(100, progress) + '%';
-    } else {
-        progressContainer.style.display = 'none';
-        progressBar.style.width = '0%';
-    }
-    notif.classList.add('show');
-    setTimeout(() => notif.classList.remove('show'), 4000);
-}
-
 function getScaleFactors() {
     if (!cropImage || !originalImage) return { scaleX: 1, scaleY: 1 };
     const rect = cropImage.getBoundingClientRect();
     const displayW = rect.width;
     const displayH = rect.height;
-    const origW = originalImage.width;
-    const origH = originalImage.height;
+    const naturalW = cropImage.naturalWidth || cropImage.width;
+    const naturalH = cropImage.naturalHeight || cropImage.height;
     if (displayW === 0 || displayH === 0) return { scaleX: 1, scaleY: 1 };
-    return { scaleX: origW / displayW, scaleY: origH / displayH };
+    return {
+        scaleX: naturalW / displayW,
+        scaleY: naturalH / displayH
+    };
+}
+
+function imageToCSS(x, y, w, h) {
+    const { scaleX, scaleY } = getScaleFactors();
+    return { x: x / scaleX, y: y / scaleY, w: w / scaleX, h: h / scaleY };
+}
+
+function cssToImage(cssX, cssY, cssW, cssH) {
+    const { scaleX, scaleY } = getScaleFactors();
+    return { x: cssX * scaleX, y: cssY * scaleY, w: cssW * scaleX, h: cssH * scaleY };
+}
+
+function getDisplaySize() {
+    const rect = cropImage.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+}
+
+function getNaturalSize() {
+    return {
+        w: cropImage.naturalWidth || cropImage.width,
+        h: cropImage.naturalHeight || cropImage.height
+    };
 }
 
 function getPointerPosition(e) {
@@ -568,31 +598,30 @@ function scaleImageToMaxWidth(img, maxWidth) {
     return canvas;
 }
 
-function getDisplaySize() {
-    return {
-        w: cropImage.naturalWidth || cropImage.width,
-        h: cropImage.naturalHeight || cropImage.height
-    };
+function showNotification(msg) {
+    notifText.textContent = msg;
+    notif.classList.add('show');
+    setTimeout(() => notif.classList.remove('show'), 4000);
 }
 
 // ============================================================
-//  GESTIÓN DE RECUADROS CON ARRASTRE (COMPLETO)
+//  GESTIÓN DE RECUADROS (con escalado y tamaño pequeño)
 // ============================================================
-let dragData = null;
 
 function createBoxElement(x, y, w, h, label) {
     const box = document.createElement('div');
     box.className = 'crop-box';
-    box.style.left = x + 'px';
-    box.style.top = y + 'px';
-    box.style.width = w + 'px';
-    box.style.height = h + 'px';
-    box.dataset.index = cropBoxes.length;
+    box.dataset.index = cropBoxesData.length;
 
     const lbl = document.createElement('span');
     lbl.className = 'crop-label';
-    lbl.textContent = label || `#${cropBoxes.length+1}`;
+    lbl.textContent = label || `#${cropBoxesData.length+1}`;
     box.appendChild(lbl);
+
+    const sizeLabel = document.createElement('span');
+    sizeLabel.className = 'crop-size';
+    sizeLabel.textContent = `${Math.round(w)}×${Math.round(h)}`;
+    box.appendChild(sizeLabel);
 
     const close = document.createElement('span');
     close.className = 'crop-close';
@@ -638,54 +667,78 @@ function createBoxElement(x, y, w, h, label) {
     });
 
     cropContainer.appendChild(box);
+    // Posicionar en CSS
+    const css = imageToCSS(x, y, w, h);
+    box.style.left = css.x + 'px';
+    box.style.top = css.y + 'px';
+    box.style.width = css.w + 'px';
+    box.style.height = css.h + 'px';
+
+    // Actualizar tamaño en la etiqueta
+    const sizeSpan = box.querySelector('.crop-size');
+    if (sizeSpan) sizeSpan.textContent = `${Math.round(w)}×${Math.round(h)}`;
+
     return box;
 }
 
 function addBox(x, y, w, h, label) {
-    const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return null;
+    const natural = getNaturalSize();
+    const display = getDisplaySize();
+    if (natural.w === 0 || natural.h === 0 || display.w === 0 || display.h === 0) return null;
+
+    // Si no se pasan coordenadas, crear un recuadro pequeño (10% del ancho visible) centrado en la vista
     if (x === undefined) {
-        const boxSize = Math.min(size.w, size.h) * 0.25;
-        x = (size.w - boxSize) / 2;
-        y = (size.h - boxSize) / 2;
-        w = boxSize;
-        h = boxSize;
+        const sizeRatio = 0.10; // 10% del ancho visible
+        const targetWidth = display.w * sizeRatio;
+        const targetHeight = targetWidth * 0.8; // proporción 5:4
+        // Convertir a píxeles de imagen
+        const imgSize = cssToImage(
+            (display.w - targetWidth) / 2,
+            (display.h - targetHeight) / 2,
+            targetWidth,
+            targetHeight
+        );
+        x = imgSize.x;
+        y = imgSize.y;
+        w = imgSize.w;
+        h = imgSize.h;
     }
-    const box = createBoxElement(x, y, w, h, label || `#${cropBoxes.length+1}`);
-    const data = { x, y, w, h, element: box, label: label || `#${cropBoxes.length+1}`, index: cropBoxes.length };
-    cropBoxes.push(data);
-    updateBoxLabels();
+
+    const box = createBoxElement(x, y, w, h, label || `#${cropBoxesData.length+1}`);
+    const data = { x, y, w, h, element: box, label: label || `#${cropBoxesData.length+1}`, index: cropBoxesData.length };
+    cropBoxesData.push(data);
+    updateLabels();
     updateUI();
     activateBox(box);
     return data;
 }
 
 function removeBox(index) {
-    if (index < 0 || index >= cropBoxes.length) return;
-    const box = cropBoxes[index];
-    if (box.element) box.element.remove();
-    cropBoxes.splice(index, 1);
-    cropBoxes.forEach((b, i) => {
+    if (index < 0 || index >= cropBoxesData.length) return;
+    const data = cropBoxesData[index];
+    data.element.remove();
+    cropBoxesData.splice(index, 1);
+    cropBoxesData.forEach((b, i) => {
         b.index = i;
         b.element.dataset.index = i;
     });
-    updateBoxLabels();
-    if (activeBoxIndex >= cropBoxes.length) activeBoxIndex = cropBoxes.length - 1;
-    if (activeBoxIndex >= 0) activateBox(cropBoxes[activeBoxIndex].element);
+    updateLabels();
+    if (activeBoxIndex >= cropBoxesData.length) activeBoxIndex = cropBoxesData.length - 1;
+    if (activeBoxIndex >= 0) activateBox(cropBoxesData[activeBoxIndex].element);
     else { activeBoxIndex = -1; delBoxBtn.disabled = true; }
     updateUI();
 }
 
 function clearBoxes() {
-    cropBoxes.forEach(b => b.element.remove());
-    cropBoxes = [];
+    cropBoxesData.forEach(b => b.element.remove());
+    cropBoxesData = [];
     activeBoxIndex = -1;
     delBoxBtn.disabled = true;
     updateUI();
 }
 
 function activateBox(element) {
-    cropBoxes.forEach(b => b.element.classList.remove('active'));
+    cropBoxesData.forEach(b => b.element.classList.remove('active'));
     if (element) {
         element.classList.add('active');
         const idx = parseInt(element.dataset.index);
@@ -697,21 +750,21 @@ function activateBox(element) {
     }
 }
 
-function updateBoxLabels() {
-    cropBoxes.forEach((b, i) => {
+function updateLabels() {
+    cropBoxesData.forEach((b, i) => {
         const lbl = b.element.querySelector('.crop-label');
         if (lbl) lbl.textContent = `#${i+1}`;
     });
 }
 
 function updateUI() {
-    const hasBoxes = cropBoxes.length > 0;
+    const hasBoxes = cropBoxesData.length > 0;
     saveTemplatesBtn.disabled = !hasBoxes;
     const hasSaved = savedTemplates.length > 0 && templatesSaved;
     applyAllBtn.disabled = !hasSaved;
     cropConfirmBtn.disabled = !hasBoxes;
     statusBar.textContent = hasBoxes ?
-        `🎯 ${cropBoxes.length} recuadros activos.` :
+        `🎯 ${cropBoxesData.length} recuadros activos.` :
         '🎯 Haz clic en "Añadir recuadro" para cada tablero.';
     if (!hasBoxes) delBoxBtn.disabled = true;
     if (editingMode) {
@@ -724,18 +777,25 @@ function updateUI() {
 }
 
 // ============================================================
-//  FUNCIONES DE ARRASTRE Y REDIMENSIÓN
+//  ARRASTRE Y REDIMENSIÓN (con escalado y actualización de tamaño)
 // ============================================================
+
+let dragData = null;
+
 function startDrag(e, box) {
     const idx = parseInt(box.dataset.index);
-    const data = cropBoxes[idx];
+    const data = cropBoxesData[idx];
     if (!data) return;
     e.preventDefault();
     const pos = getPointerPosition(e);
+    const css = imageToCSS(data.x, data.y, data.w, data.h);
     dragData = {
-        box: box, index: idx,
-        startX: pos.clientX, startY: pos.clientY,
-        origX: data.x, origY: data.y,
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origCSSX: css.x,
+        origCSSY: css.y,
         mode: 'drag'
     };
     document.addEventListener('mousemove', onDragMove);
@@ -744,14 +804,18 @@ function startDrag(e, box) {
 
 function startDragTouch(e, box) {
     const idx = parseInt(box.dataset.index);
-    const data = cropBoxes[idx];
+    const data = cropBoxesData[idx];
     if (!data) return;
     e.preventDefault();
     const pos = getPointerPosition(e);
+    const css = imageToCSS(data.x, data.y, data.w, data.h);
     dragData = {
-        box: box, index: idx,
-        startX: pos.clientX, startY: pos.clientY,
-        origX: data.x, origY: data.y,
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origCSSX: css.x,
+        origCSSY: css.y,
         mode: 'drag'
     };
     document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
@@ -760,16 +824,22 @@ function startDragTouch(e, box) {
 
 function startResize(e, box, dir) {
     const idx = parseInt(box.dataset.index);
-    const data = cropBoxes[idx];
+    const data = cropBoxesData[idx];
     if (!data) return;
     e.preventDefault();
     const pos = getPointerPosition(e);
+    const css = imageToCSS(data.x, data.y, data.w, data.h);
     dragData = {
-        box: box, index: idx,
-        startX: pos.clientX, startY: pos.clientY,
-        origX: data.x, origY: data.y,
-        origW: data.w, origH: data.h,
-        dir: dir, mode: 'resize'
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origCSSX: css.x,
+        origCSSY: css.y,
+        origCSSW: css.w,
+        origCSSH: css.h,
+        dir: dir,
+        mode: 'resize'
     };
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', onDragEnd);
@@ -777,16 +847,22 @@ function startResize(e, box, dir) {
 
 function startResizeTouch(e, box, dir) {
     const idx = parseInt(box.dataset.index);
-    const data = cropBoxes[idx];
+    const data = cropBoxesData[idx];
     if (!data) return;
     e.preventDefault();
     const pos = getPointerPosition(e);
+    const css = imageToCSS(data.x, data.y, data.w, data.h);
     dragData = {
-        box: box, index: idx,
-        startX: pos.clientX, startY: pos.clientY,
-        origX: data.x, origY: data.y,
-        origW: data.w, origH: data.h,
-        dir: dir, mode: 'resize'
+        box: box,
+        index: idx,
+        startX: pos.clientX,
+        startY: pos.clientY,
+        origCSSX: css.x,
+        origCSSY: css.y,
+        origCSSW: css.w,
+        origCSSH: css.h,
+        dir: dir,
+        mode: 'resize'
     };
     document.addEventListener('touchmove', onDragMoveTouch, { passive: false });
     document.addEventListener('touchend', onDragEndTouch, { passive: false });
@@ -809,44 +885,69 @@ function onDragMoveTouch(e) {
 function processDrag(clientX, clientY) {
     const dx = clientX - dragData.startX;
     const dy = clientY - dragData.startY;
-    const size = getDisplaySize();
-    const data = cropBoxes[dragData.index];
+    const displaySize = getDisplaySize();
+    const data = cropBoxesData[dragData.index];
     if (!data) return;
 
     if (dragData.mode === 'drag') {
-        let newX = dragData.origX + dx;
-        let newY = dragData.origY + dy;
-        newX = Math.max(0, Math.min(newX, size.w - data.w));
-        newY = Math.max(0, Math.min(newY, size.h - data.h));
-        data.x = newX;
-        data.y = newY;
+        let newCSSX = dragData.origCSSX + dx;
+        let newCSSY = dragData.origCSSY + dy;
+        let newImg = cssToImage(newCSSX, newCSSY, data.w, data.h);
+        const natural = getNaturalSize();
+        newImg.x = Math.max(0, Math.min(newImg.x, natural.w - data.w));
+        newImg.y = Math.max(0, Math.min(newImg.y, natural.h - data.h));
+        data.x = newImg.x;
+        data.y = newImg.y;
+        const css = imageToCSS(data.x, data.y, data.w, data.h);
+        data.element.style.left = css.x + 'px';
+        data.element.style.top = css.y + 'px';
     } else if (dragData.mode === 'resize') {
-        let newW = dragData.origW, newH = dragData.origH;
-        let newX = dragData.origX, newY = dragData.origY;
-        switch (dragData.dir) {
+        let newCSSW = dragData.origCSSW;
+        let newCSSH = dragData.origCSSH;
+        let newCSSX = dragData.origCSSX;
+        let newCSSY = dragData.origCSSY;
+        const dir = dragData.dir;
+        switch (dir) {
             case 'nw':
-                newW = dragData.origW - dx; newH = dragData.origH - dy;
-                newX = dragData.origX + dx; newY = dragData.origY + dy; break;
+                newCSSW = dragData.origCSSW - dx;
+                newCSSH = dragData.origCSSH - dy;
+                newCSSX = dragData.origCSSX + dx;
+                newCSSY = dragData.origCSSY + dy;
+                break;
             case 'ne':
-                newW = dragData.origW + dx; newH = dragData.origH - dy;
-                newY = dragData.origY + dy; break;
+                newCSSW = dragData.origCSSW + dx;
+                newCSSH = dragData.origCSSH - dy;
+                newCSSY = dragData.origCSSY + dy;
+                break;
             case 'sw':
-                newW = dragData.origW - dx; newH = dragData.origH + dy;
-                newX = dragData.origX + dx; break;
+                newCSSW = dragData.origCSSW - dx;
+                newCSSH = dragData.origCSSH + dy;
+                newCSSX = dragData.origCSSX + dx;
+                break;
             case 'se':
-                newW = dragData.origW + dx; newH = dragData.origH + dy; break;
+                newCSSW = dragData.origCSSW + dx;
+                newCSSH = dragData.origCSSH + dy;
+                break;
         }
-        if (newW >= 30 && newX >= 0 && newX + newW <= size.w) {
-            data.w = newW; data.x = newX;
+        let newImg = cssToImage(newCSSX, newCSSY, newCSSW, newCSSH);
+        const natural = getNaturalSize();
+        if (newImg.w >= 30 && newImg.x >= 0 && newImg.x + newImg.w <= natural.w) {
+            data.w = newImg.w;
+            data.x = newImg.x;
         }
-        if (newH >= 30 && newY >= 0 && newY + newH <= size.h) {
-            data.h = newH; data.y = newY;
+        if (newImg.h >= 30 && newImg.y >= 0 && newImg.y + newImg.h <= natural.h) {
+            data.h = newImg.h;
+            data.y = newImg.y;
         }
+        const css = imageToCSS(data.x, data.y, data.w, data.h);
+        data.element.style.left = css.x + 'px';
+        data.element.style.top = css.y + 'px';
+        data.element.style.width = css.w + 'px';
+        data.element.style.height = css.h + 'px';
+        // Actualizar tamaño en etiqueta
+        const sizeSpan = data.element.querySelector('.crop-size');
+        if (sizeSpan) sizeSpan.textContent = `${Math.round(data.w)}×${Math.round(data.h)}`;
     }
-    data.element.style.left = data.x + 'px';
-    data.element.style.top = data.y + 'px';
-    data.element.style.width = data.w + 'px';
-    data.element.style.height = data.h + 'px';
 }
 
 function onDragEnd(e) {
@@ -862,6 +963,15 @@ function onDragEndTouch(e) {
 }
 
 // ============================================================
+//  GUÍAS DE ALINEACIÓN
+// ============================================================
+toggleGridBtn.addEventListener('click', function() {
+    gridVisible = !gridVisible;
+    gridOverlay.classList.toggle('active', gridVisible);
+    toggleGridBtn.innerHTML = gridVisible ? '<i class="fas fa-th"></i> Ocultar guías' : '<i class="fas fa-th"></i> Mostrar guías';
+});
+
+// ============================================================
 //  BOTONES
 // ============================================================
 addBoxBtn.addEventListener('click', function() {
@@ -873,31 +983,31 @@ addBoxBtn.addEventListener('click', function() {
 delBoxBtn.addEventListener('click', function() {
     if (activeBoxIndex === -1) return;
     const idx = activeBoxIndex;
-    const box = cropBoxes[idx];
+    const box = cropBoxesData[idx];
     if (box) box.element.classList.remove('active');
     removeBox(idx);
     showNotification('Recuadro eliminado');
 });
 
 clearBoxesBtn.addEventListener('click', function() {
-    if (cropBoxes.length === 0) return;
+    if (cropBoxesData.length === 0) return;
     if (!confirm('¿Eliminar todos los recuadros?')) return;
     clearBoxes();
     showNotification('Recuadros eliminados.');
 });
 
 saveTemplatesBtn.addEventListener('click', function() {
-    if (cropBoxes.length === 0) {
+    if (cropBoxesData.length === 0) {
         showNotification('❌ No hay recuadros para guardar.');
         return;
     }
-    const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return;
-    savedTemplates = cropBoxes.map(b => ({
-        x: b.x / size.w,
-        y: b.y / size.h,
-        w: b.w / size.w,
-        h: b.h / size.h
+    const natural = getNaturalSize();
+    if (natural.w === 0 || natural.h === 0) return;
+    savedTemplates = cropBoxesData.map(b => ({
+        x: b.x / natural.w,
+        y: b.y / natural.h,
+        w: b.w / natural.w,
+        h: b.h / natural.h
     }));
     templatesSaved = true;
     updateUI();
@@ -905,24 +1015,24 @@ saveTemplatesBtn.addEventListener('click', function() {
 });
 
 // ============================================================
-//  APLICAR PLANTILLAS CON DIAGNÓSTICO
+//  APLICAR PLANTILLAS
 // ============================================================
 function applySavedTemplatesToCurrentImage() {
     clearBoxes();
-    const size = getDisplaySize();
-    if (size.w === 0 || size.h === 0) return;
+    const natural = getNaturalSize();
+    if (natural.w === 0 || natural.h === 0) return;
     for (const t of savedTemplates) {
-        const x = t.x * size.w;
-        const y = t.y * size.h;
-        const w = t.w * size.w;
-        const h = t.h * size.h;
+        const x = t.x * natural.w;
+        const y = t.y * natural.h;
+        const w = t.w * natural.w;
+        const h = t.h * natural.h;
         addBox(x, y, w, h);
     }
-    if (cropBoxes.length > 0) activateBox(cropBoxes[0].element);
+    if (cropBoxesData.length > 0) activateBox(cropBoxesData[0].element);
     updateUI();
 }
 
-async function applyTemplatesToImage(imageDataUrl, originalName, page, totalItems, currentItem) {
+async function applyTemplatesToImage(imageDataUrl, originalName, page) {
     if (savedTemplates.length === 0 || !templatesSaved) return [];
     const img = new Image();
     await new Promise((resolve) => {
@@ -934,7 +1044,6 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page, totalItem
     const resultsList = [];
     for (let idx = 0; idx < savedTemplates.length; idx++) {
         const t = savedTemplates[idx];
-        // Margen del 10% (aumentado para mejor detección)
         const marginX = t.w * origW * 0.10;
         const marginY = t.h * origH * 0.10;
         const cropOrigX = Math.max(0, t.x * origW - marginX);
@@ -949,13 +1058,7 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page, totalItem
         canvas.height = outH;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
-
-        // Usar PNG para mejor calidad
         const croppedDataUrl = canvas.toDataURL('image/png');
-
-        // Mostrar progreso
-        const progress = ((currentItem + (idx / savedTemplates.length)) / totalItems) * 100;
-        showNotification(`⏳ Procesando página ${page}, tablero ${idx+1}...`, progress);
 
         try {
             const response = await fetch('/process-cropped', {
@@ -999,7 +1102,7 @@ async function applyTemplatesToImage(imageDataUrl, originalName, page, totalItem
 }
 
 // ============================================================
-//  PROCESAR TODAS LAS IMÁGENES
+//  PROCESAR TODAS
 // ============================================================
 applyAllBtn.addEventListener('click', async function() {
     if (savedTemplates.length === 0 || !templatesSaved) {
@@ -1013,17 +1116,10 @@ applyAllBtn.addEventListener('click', async function() {
 
     allResults = [];
     let totalProcessed = 0, totalErrors = 0;
-    const totalItems = imageItems.length * savedTemplates.length;
 
     for (let i = 0; i < imageItems.length; i++) {
         const item = imageItems[i];
-        const boardResults = await applyTemplatesToImage(
-            item.dataUrl,
-            item.originalName,
-            item.page,
-            totalItems,
-            i * savedTemplates.length
-        );
+        const boardResults = await applyTemplatesToImage(item.dataUrl, item.originalName, item.page);
         for (const r of boardResults) {
             allResults.push({
                 page: item.page,
@@ -1036,6 +1132,9 @@ applyAllBtn.addEventListener('click', async function() {
             });
             if (r.fen) totalProcessed++;
             else totalErrors++;
+        }
+        if (i % 2 === 0 || i === imageItems.length - 1) {
+            applyAllBtn.textContent = `⏳ ${i+1}/${imageItems.length}...`;
         }
     }
 
@@ -1068,8 +1167,8 @@ function showCropItem(index) {
         cropImage.onload = function() {
             if (templatesSaved && savedTemplates.length > 0) {
                 applySavedTemplatesToCurrentImage();
-            } else if (index === 0 && cropBoxes.length === 0) {
-                addBox();
+            } else if (index === 0 && cropBoxesData.length === 0) {
+                addBox(); // añade recuadro pequeño centrado
             }
             if (editingMode) {
                 editingBadge.classList.remove('hidden');
@@ -1079,6 +1178,9 @@ function showCropItem(index) {
                 cancelEditBtn.disabled = true;
             }
             updateUI();
+            // Mostrar factores de escala en consola para depuración
+            const sc = getScaleFactors();
+            console.log(`[DEBUG] scaleX: ${sc.scaleX}, scaleY: ${sc.scaleY}`);
         };
         if (cropImage.complete) cropImage.onload();
     };
@@ -1092,20 +1194,19 @@ function showCropItem(index) {
 //  GUARDAR RECORTE (edición)
 // ============================================================
 cropConfirmBtn.addEventListener('click', async function() {
-    if (cropBoxes.length === 0) {
+    if (cropBoxesData.length === 0) {
         showNotification('❌ No hay recuadros para recortar.');
         return;
     }
-    let boxData = cropBoxes.find(b => b.element.classList.contains('active'));
-    if (!boxData) boxData = cropBoxes[0];
+    let boxData = cropBoxesData.find(b => b.element.classList.contains('active'));
+    if (!boxData) boxData = cropBoxesData[0];
     if (!boxData) return;
 
-    const { scaleX, scaleY } = getScaleFactors();
-    const origX = boxData.x * scaleX;
-    const origY = boxData.y * scaleY;
-    const origW = boxData.w * scaleX;
-    const origH = boxData.h * scaleY;
-    // Margen 10%
+    const origX = boxData.x;
+    const origY = boxData.y;
+    const origW = boxData.w;
+    const origH = boxData.h;
+
     const marginX = origW * 0.10;
     const marginY = origH * 0.10;
     const cropOrigX = Math.max(0, origX - marginX);
@@ -1122,11 +1223,12 @@ cropConfirmBtn.addEventListener('click', async function() {
     ctx.drawImage(originalImage, cropOrigX, cropOrigY, cropOrigW, cropOrigH, 0, 0, outW, outH);
     const croppedDataUrl = canvas.toDataURL('image/png');
 
-    // Mostrar en modal para diagnóstico
+    // Mostrar en modal
     modalImage.src = croppedDataUrl;
-    modalPage.textContent = imageItems[currentIndex].page || '-';
-    modalBoard.textContent = activeBoxIndex !== -1 ? activeBoxIndex + 1 : '?';
-    modalError.textContent = '⏳ Procesando...';
+    modalInfo.innerHTML = `
+        <p><strong>Página:</strong> ${imageItems[currentIndex].page || '-'} | <strong>Tablero:</strong> ${activeBoxIndex !== -1 ? activeBoxIndex+1 : '?'}</p>
+        <p style="color:#f39c12;">⏳ Procesando...</p>
+    `;
     modal.classList.add('active');
 
     cropConfirmBtn.disabled = true;
@@ -1164,8 +1266,10 @@ cropConfirmBtn.addEventListener('click', async function() {
                     cropDataURL: croppedDataUrl
                 });
             }
-            modalError.textContent = '✅ FEN obtenido correctamente';
-            modalError.style.color = '#27ae60';
+            modalInfo.innerHTML = `
+                <p><strong>Página:</strong> ${imageItems[currentIndex].page || '-'} | <strong>Tablero:</strong> ${activeBoxIndex !== -1 ? activeBoxIndex+1 : '?'}</p>
+                <p style="color:#27ae60;">✅ FEN obtenido correctamente</p>
+            `;
             showNotification('✅ Resultado actualizado');
             if (editingMode) {
                 editingMode = false;
@@ -1174,16 +1278,19 @@ cropConfirmBtn.addEventListener('click', async function() {
             }
             showResults();
             showCropItem(currentIndex);
-            // Cerrar modal después de 2 segundos
             setTimeout(() => modal.classList.remove('active'), 2000);
         } else {
-            modalError.textContent = '❌ Error: ' + (data.error || 'No se pudo obtener FEN');
-            modalError.style.color = '#e74c3c';
+            modalInfo.innerHTML = `
+                <p><strong>Página:</strong> ${imageItems[currentIndex].page || '-'} | <strong>Tablero:</strong> ${activeBoxIndex !== -1 ? activeBoxIndex+1 : '?'}</p>
+                <p style="color:#e74c3c;">❌ Error: ${data.error || 'No se pudo obtener FEN'}</p>
+            `;
             showNotification('❌ Error: ' + (data.error || 'No se pudo obtener FEN'));
         }
     } catch (error) {
-        modalError.textContent = '❌ Error de red: ' + error.message;
-        modalError.style.color = '#e74c3c';
+        modalInfo.innerHTML = `
+            <p><strong>Página:</strong> ${imageItems[currentIndex].page || '-'} | <strong>Tablero:</strong> ${activeBoxIndex !== -1 ? activeBoxIndex+1 : '?'}</p>
+            <p style="color:#e74c3c;">❌ Error de red: ${error.message}</p>
+        `;
         showNotification('❌ Error de red: ' + error.message);
     }
     cropConfirmBtn.disabled = false;
@@ -1247,7 +1354,7 @@ uploadForm.addEventListener('submit', async function(e) {
     imageItems = [];
     allResults = [];
     currentIndex = 0;
-    cropBoxes = [];
+    cropBoxesData = [];
     savedTemplates = [];
     templatesSaved = false;
     editingMode = false;
@@ -1343,7 +1450,7 @@ uploadForm.addEventListener('submit', async function(e) {
 });
 
 // ============================================================
-//  MOSTRAR RESULTADOS CON DIAGNÓSTICO
+//  MOSTRAR RESULTADOS
 // ============================================================
 function showResults() {
     resultContainer.classList.remove('hidden');
@@ -1384,7 +1491,7 @@ function showResults() {
             <td class="action-cell">
                 ${!isError ? `<button class="btn-copy" data-fen="${fen}" data-index="${i}" title="Copiar FEN">✂️</button>` : ''}
                 <button class="btn btn-warning btn-sm edit-btn" data-index="${i}" title="Editar">✏️</button>
-                <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte enviado">🔍</button>
+                <button class="btn btn-outline btn-sm view-crop-btn" data-index="${i}" title="Ver recorte">🔍</button>
             </td>
         </tr>`;
     }
@@ -1396,7 +1503,6 @@ function showResults() {
 
     if (totalSuccess > 0) exportSection.style.display = 'block';
 
-    // Eventos
     document.querySelectorAll('.btn-toggle-turn').forEach(btn => {
         btn.addEventListener('click', function() {
             const fen = this.getAttribute('data-fen');
@@ -1437,7 +1543,7 @@ function showResults() {
             cropSection.classList.remove('hidden');
             showCropItem(pageIndex);
             const boardIdx = result.boardIndex;
-            if (cropBoxes.length > boardIdx) activateBox(cropBoxes[boardIdx].element);
+            if (cropBoxesData.length > boardIdx) activateBox(cropBoxesData[boardIdx].element);
             showNotification(`✏️ Editando tablero ${boardIdx+1} de página ${result.page}`);
         });
     });
@@ -1452,10 +1558,10 @@ function showResults() {
                 return;
             }
             modalImage.src = result.cropDataURL;
-            modalPage.textContent = result.page || '-';
-            modalBoard.textContent = result.boardIndex !== undefined ? result.boardIndex + 1 : '?';
-            modalError.textContent = result.error ? '❌ ' + result.error : '✅ FEN obtenido correctamente';
-            modalError.style.color = result.error ? '#e74c3c' : '#27ae60';
+            modalInfo.innerHTML = `
+                <p><strong>Página:</strong> ${result.page || '-'} | <strong>Tablero:</strong> ${result.boardIndex !== undefined ? result.boardIndex+1 : '?'}</p>
+                ${result.error ? `<p style="color:#e74c3c;">❌ ${result.error}</p>` : '<p style="color:#27ae60;">✅ FEN obtenido</p>'}
+            `;
             modal.classList.add('active');
         });
     });
