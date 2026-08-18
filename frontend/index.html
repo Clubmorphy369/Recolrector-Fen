@@ -232,7 +232,7 @@
         .crop-box.active .resize-handle { background: #9b59b6; }
         .resize-nw { top: -9px; left: -9px; cursor: nw-resize; }
         .resize-ne { top: -9px; right: -9px; cursor: ne-resize; }
-        .resize-sw { bottom: -9px; left: -9px; cursor: sw-resize; }
+        .resize-sw { bottom: -9px; right: -9px; cursor: sw-resize; }
         .resize-se { bottom: -9px; right: -9px; cursor: se-resize; }
 
         .image-counter {
@@ -456,6 +456,7 @@
             <button class="btn" id="cropPrevBtn" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
             <button class="btn btn-success" id="cropConfirmBtn" disabled><i class="fas fa-check"></i> Recortar y guardar</button>
             <button class="btn btn-warning" id="cropSkipBtn"><i class="fas fa-forward"></i> Saltar imagen</button>
+            <button class="btn btn-purple" id="invertirOrdenBtn"><i class="fas fa-sort-amount-down"></i> Invertir orden</button>
             <button class="btn btn-purple" id="applyAllBtn" disabled><i class="fas fa-bolt"></i> Aplicar y procesar todas</button>
             <button class="btn btn-danger" id="cancelEditBtn" disabled><i class="fas fa-times"></i> Cancelar edición</button>
             <button class="btn" id="cropNextBtn" disabled>Siguiente imagen <i class="fas fa-chevron-right"></i></button>
@@ -1782,6 +1783,23 @@ fileInput.addEventListener('change', function() {
 });
 
 // ============================================================
+//  INVERTIR ORDEN DE IMÁGENES
+// ============================================================
+document.getElementById('invertirOrdenBtn').addEventListener('click', function() {
+    if (!imageItems || imageItems.length <= 1) {
+        showNotification('No hay suficientes imágenes para invertir.');
+        return;
+    }
+    // Invertir el array
+    imageItems.reverse();
+    // Recalcular el índice actual (para mantener la misma imagen)
+    currentIndex = imageItems.length - 1 - currentIndex;
+    // Recargar la imagen actual
+    showCropItem(currentIndex);
+    showNotification('✅ Orden de imágenes invertido');
+});
+
+// ============================================================
 //  ACTUALIZAR TAMAÑO DE CUADRÍCULA AL REDIMENSIONAR
 // ============================================================
 window.addEventListener('resize', function() {
@@ -1789,10 +1807,6 @@ window.addEventListener('resize', function() {
         updateGridOverlaySize();
     }
 });
-
-// También al hacer scroll en el contenedor, la posición del overlay no cambia porque es relativa al contenedor,
-// pero si la imagen se mueve dentro del contenedor (por ejemplo, centrado), la posición relativa es estable.
-// Si la imagen está centrada, el offset se mantiene.
 
 // ============================================================
 //  INICIO: construir cuadrícula por defecto
