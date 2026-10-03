@@ -5,6 +5,7 @@ import base64
 import cv2
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory, Response
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from pdf2image import convert_from_bytes
 from PIL import Image
