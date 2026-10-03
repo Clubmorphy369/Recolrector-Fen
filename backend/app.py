@@ -17,6 +17,20 @@ import re
 
 app = Flask(__name__)
 
+# ⭐ v1: CORS — permitir peticiones desde Club Morphy
+CORS(app, resources={r"/*": {
+    "origins": [
+        "https://club-morphy-6aa5c.web.app",
+        "https://club-morphy-6aa5c.firebaseapp.com",
+        "https://clubmorphy369.github.io",
+        "http://localhost:8080",
+        "http://localhost:5000",
+        "http://127.0.0.1:8080"
+    ],
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type"]
+}})
+
 # Aumentar límite de tamaño para 60 imágenes
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 UPLOAD_FOLDER = tempfile.mkdtemp()
