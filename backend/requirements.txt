@@ -1,5 +1,6 @@
 Flask==2.3.3
 Werkzeug==2.3.7
+flask-cors==4.0.1
 gunicorn==21.2.0
 requests==2.31.0
 pdf2image==1.16.3
