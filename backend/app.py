@@ -14,6 +14,8 @@ import traceback
 import shutil
 from datetime import datetime, timezone
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 
@@ -48,9 +50,19 @@ def clean_fen(raw_fen):
         return ' '.join(parts[:6])
     return None
 
+# ⭐ NUEVO: health check para warm-up del frontend
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok', 'service': 'chess-pdf-fen'}), 200
+
 @app.route('/')
 def index():
-    return send_from_directory(FRONTEND_DIR, 'index.html')
+    # Si el frontend está desplegado en Render, servirlo.
+    # Si no, devolver JSON (no 500) para no romper el warm-up.
+    try:
+        return send_from_directory(FRONTEND_DIR, 'index.html')
+    except Exception:
+        return jsonify({'status': 'ok', 'note': 'Backend only'}), 200
 
 @app.route('/<path:filename>')
 def static_files(filename):
@@ -164,6 +176,7 @@ def detect_boards_in_image(image_bytes, use_grid=False):
         return [image_bytes]
 
 # ---------- PROCESAR UN TABLERO (FEN + MINIATURA) ----------
+# ⭐ MEJORA: retry con backoff exponencial para chessvision.ai
 def process_board_image(board_img, original_img_bytes=None):
     fen = None
     thumbnail_b64 = None
@@ -195,9 +208,49 @@ def process_board_image(board_img, original_img_bytes=None):
             "image": f"data:image/jpeg;base64,{encoded_string}",
             "predict_turn": True
         }
-        response = requests.post('http://app.chessvision.ai/predict', json=payload, timeout=30)  # aumentar timeout
-        print(f"[DEBUG] Chessvision.ai status: {response.status_code}")
-        if response.status_code == 200:
+
+        # ⭐ Retry: 3 intentos con backoff. 4xx no reintenta (error del cliente).
+        MAX_RETRIES = 2
+        response = None
+        last_error = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = requests.post(
+                    'http://app.chessvision.ai/predict',
+                    json=payload, timeout=30
+                )
+                print(f"[DEBUG] Chessvision.ai status: {response.status_code} "
+                      f"(intento {attempt+1}/{MAX_RETRIES+1})")
+
+                if response.status_code == 200:
+                    break
+                elif response.status_code == 429:
+                    last_error = "Rate limited (429)"
+                    if attempt < MAX_RETRIES:
+                        wait = 3 * (attempt + 1)
+                        print(f"[WARN] Rate limited (429). Esperando {wait}s...")
+                        time.sleep(wait)
+                elif 500 <= response.status_code < 600:
+                    last_error = f"HTTP {response.status_code}"
+                    if attempt < MAX_RETRIES:
+                        wait = 1 * (attempt + 1)
+                        print(f"[WARN] Server error ({response.status_code}). Esperando {wait}s...")
+                        time.sleep(wait)
+                else:
+                    last_error = f"HTTP {response.status_code}: {response.text[:100]}"
+                    break  # 4xx: no reintentar
+            except requests.Timeout:
+                last_error = "Timeout (30s)"
+                print(f"[WARN] Timeout (intento {attempt+1})")
+                if attempt < MAX_RETRIES:
+                    time.sleep(1 * (attempt + 1))
+            except requests.RequestException as e:
+                last_error = str(e)[:100]
+                print(f"[WARN] Request error (intento {attempt+1}): {e}")
+                if attempt < MAX_RETRIES:
+                    time.sleep(1 * (attempt + 1))
+
+        if response is not None and response.status_code == 200:
             data = response.json()
             if data.get('success'):
                 raw_fen = data.get('result')
@@ -211,7 +264,7 @@ def process_board_image(board_img, original_img_bytes=None):
                 error_msg = f"Chessvision.ai success=false: {data.get('message', '')}"
                 print(f"[WARN] {error_msg}")
         else:
-            error_msg = f"Chessvision.ai HTTP {response.status_code}: {response.text[:100]}"
+            error_msg = last_error or "Chessvision.ai no respondió"
             print(f"[ERROR] {error_msg}")
 
         # --- Generar miniatura (200x200) ---
@@ -229,7 +282,7 @@ def process_board_image(board_img, original_img_bytes=None):
             _, buffer = cv2.imencode('.jpg', canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
         else:
-            error_msg = "Imagen de tablero no válida para miniatura"
+            error_msg = error_msg or "Imagen de tablero no válida para miniatura"
 
         return fen, thumbnail_b64, error_msg
     except Exception as e:
@@ -373,7 +426,11 @@ def upload_files():
         print(f"[ERROR] upload_files: {traceback.format_exc()}")
         return jsonify({'error': f'Error interno: {str(e)[:100]}'}), 500
 
-# ---------- NUEVO: EXTRAER PÁGINAS DE PDF (SIN LÍMITE DE 3) ----------
+# ---------- EXTRAER PÁGINAS DE PDF (optimizado) ----------
+# ⭐ MEJORAS:
+#   1. Validación contra total_pages real (evita 60 intentos fallidos)
+#   2. Páginas contiguas → UNA sola llamada a convert_from_bytes (~6x más rápido)
+#   3. Páginas dispersas → ThreadPoolExecutor para paralelizar
 @app.route('/extract-pdf-pages', methods=['POST'])
 def extract_pdf_pages():
     try:
@@ -382,68 +439,121 @@ def extract_pdf_pages():
         file = request.files['files']
         if not file:
             return jsonify({'error': 'Archivo vacío'}), 400
-        
+
         file_bytes = file.read()
         pages_str = request.form.get('pages', '1')
         selected_pages = [int(p.strip()) for p in pages_str.split(',') if p.strip().isdigit()]
         if not selected_pages:
             selected_pages = [1]
-        
-        # 🔥 QUITAMOS EL LÍMITE DE 3 PÁGINAS – ahora soporta hasta 60
-        # selected_pages = selected_pages[:3]   <-- ELIMINADO
-        
+
+        # ⭐ 1) Validar contra el total real del PDF
+        total_pages = None
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(io.BytesIO(file_bytes))
+            total_pages = len(reader.pages)
+            original_count = len(selected_pages)
+            selected_pages = [p for p in selected_pages if 1 <= p <= total_pages]
+            filtered = original_count - len(selected_pages)
+            if filtered > 0:
+                print(f"[INFO] PDF tiene {total_pages} páginas. Filtradas {filtered} no válidas.")
+        except Exception as e:
+            print(f"[WARN] No se pudo leer total de páginas: {e}")
+
         # Limitar a 60 páginas para evitar sobrecarga
         if len(selected_pages) > 60:
             selected_pages = selected_pages[:60]
-        
+
+        if not selected_pages:
+            return jsonify({'error': 'No hay páginas válidas en el rango solicitado'}), 400
+
+        selected_pages = sorted(selected_pages)
+
+        # ⭐ 2) Detectar si son contiguas (caso típico: 1..10)
+        is_contiguous = (selected_pages[-1] - selected_pages[0] + 1) == len(selected_pages)
         result = []
-        for page_num in selected_pages:
+
+        if is_contiguous:
+            first_p = selected_pages[0]
+            last_p = selected_pages[-1]
             try:
-                img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format='JPEG', quality=75)
-                img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
-                result.append({
-                    'number': page_num,
-                    'image': img_b64
-                })
+                print(f"[INFO] Páginas contiguas {first_p}-{last_p}: una sola conversión")
+                images = convert_from_bytes(
+                    file_bytes, dpi=150,
+                    first_page=first_p, last_page=last_p
+                )
+                for idx, page_num in enumerate(selected_pages):
+                    try:
+                        img = images[idx]
+                        img_bytes = io.BytesIO()
+                        img.save(img_bytes, format='JPEG', quality=75)
+                        img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+                        result.append({'number': page_num, 'image': img_b64})
+                    except Exception as e:
+                        print(f"[ERROR] Serializando página {page_num}: {e}")
+                        result.append({'number': page_num, 'error': str(e)[:100]})
             except Exception as e:
-                print(f"[ERROR] Página {page_num}: {e}")
-                # Devolver error en esa página para que el frontend pueda mostrar qué falló
-                result.append({
-                    'number': page_num,
-                    'error': str(e)[:100]
-                })
-                continue
-        
+                # Fallback: página por página
+                print(f"[WARN] convert_from_bytes contiguo falló: {e}. Fallback por página.")
+                for page_num in selected_pages:
+                    try:
+                        img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
+                        img_bytes = io.BytesIO()
+                        img.save(img_bytes, format='JPEG', quality=75)
+                        img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+                        result.append({'number': page_num, 'image': img_b64})
+                    except Exception as e2:
+                        print(f"[ERROR] Página {page_num}: {e2}")
+                        result.append({'number': page_num, 'error': str(e2)[:100]})
+        else:
+            # ⭐ 3) Páginas dispersas: paralelizar con ThreadPoolExecutor
+            print(f"[INFO] Páginas dispersas: {selected_pages}")
+
+            def render_one(page_num):
+                try:
+                    img = convert_from_bytes(file_bytes, dpi=150, first_page=page_num, last_page=page_num)[0]
+                    img_bytes = io.BytesIO()
+                    img.save(img_bytes, format='JPEG', quality=75)
+                    img_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+                    return {'number': page_num, 'image': img_b64}
+                except Exception as e:
+                    print(f"[ERROR] Página {page_num}: {e}")
+                    return {'number': page_num, 'error': str(e)[:100]}
+
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {executor.submit(render_one, p): p for p in selected_pages}
+                for future in as_completed(futures):
+                    result.append(future.result())
+            result.sort(key=lambda x: x['number'])
+
         return jsonify({'success': True, 'pages': result})
     except Exception as e:
         print(f"[ERROR] extract_pdf_pages: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
-# ---------- NUEVO: PROCESAR RECORTE MANUAL ----------
+# ---------- PROCESAR RECORTE MANUAL (sin cambios) ----------
 @app.route('/process-cropped', methods=['POST'])
 def process_cropped():
     try:
         data = request.get_json()
         if not data or 'image' not in data:
             return jsonify({'error': 'No se envió imagen'}), 400
-        
+
         image_b64 = data['image']
         if ',' in image_b64:
             image_b64 = image_b64.split(',')[1]
-        
+
         image_bytes = base64.b64decode(image_b64)
         original_name = data.get('originalName', 'unknown')
         page = data.get('page', None)
-        
+
         nparr = np.frombuffer(image_bytes, np.uint8)
         board_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if board_img is None:
             return jsonify({'error': 'No se pudo decodificar la imagen'}), 400
-        
+
         fen, thumbnail, error = process_board_image(board_img, original_img_bytes=image_bytes)
-        
+
         if fen and thumbnail:
             return jsonify({
                 'success': True,
@@ -472,6 +582,7 @@ def process_cropped():
         return jsonify({'error': str(e)}), 500
 
 # ---------- EXPORTAR PGN ----------
+# ⭐ MEJORA: límite de 200 (antes 64) — margen para sesiones de 60+ recortes
 @app.route('/export-pgn', methods=['POST'])
 def export_pgn():
     try:
@@ -479,21 +590,21 @@ def export_pgn():
         fens = data.get('fens', [])
         study_name = data.get('study_name', 'Mi Estudio de Ajedrez')
         user = data.get('user', 'Anónimo')
-        
+
         if not fens:
             return jsonify({'error': 'No se proporcionaron FEN'}), 400
-        
-        if len(fens) > 64:
-            fens = fens[:64]
-        
+
+        if len(fens) > 200:
+            fens = fens[:200]
+
         now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y.%m.%d")
         time_str = now.strftime("%H:%M:%S")
-        
+
         pgn_lines = []
         for idx, fen in enumerate(fens, 1):
             chapter_name = f"Capítulo {idx}"
-            
+
             pgn_lines.append(f'[Event "{study_name}: {chapter_name}"]')
             pgn_lines.append(f'[Date "{date_str}"]')
             pgn_lines.append('[Result "*"]')
@@ -511,13 +622,13 @@ def export_pgn():
             pgn_lines.append("")
             pgn_lines.append(" *")
             pgn_lines.append("")
-        
+
         pgn_text = "\n".join(pgn_lines)
-        
+
         safe_study_name = re.sub(r'[^a-zA-Z0-9-]', '-', study_name).lower()
         safe_user = re.sub(r'[^a-zA-Z0-9-]', '-', user).lower()
         filename = f"lichess_study_{safe_study_name}_by_{safe_user}_{date_str.replace('.', '-')}.pgn"
-        
+
         response = Response(pgn_text, mimetype='text/plain')
         response.headers.set("Content-Disposition", "attachment", filename=filename)
         return response
