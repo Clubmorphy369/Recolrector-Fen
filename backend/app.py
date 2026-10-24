@@ -190,7 +190,17 @@ def process_board_image(board_img, original_img_bytes=None):
             if board_img is None:
                 return None, None, "No se pudo obtener imagen de tablero"
 
-        _, board_bytes = cv2.imencode('.jpg', board_img)
+        # --- INICIO PREPROCESAMIENTO ---
+        # Convertir a escala de grises
+        gray = cv2.cvtColor(board_img, cv2.COLOR_BGR2GRAY)
+        # Aplicar un umbral para volver las casillas sólidas (blanco y negro)
+        # Nota: Si notas que se pierden piezas, puedes probar cambiando 150 por 120 o 180
+        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+        # Convertir de vuelta a BGR para que chessvision no falle
+        board_img_processed = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+        _, board_bytes = cv2.imencode('.jpg', board_img_processed)
+        # --- FIN PREPROCESAMIENTO ---
+        
         board_bytes = board_bytes.tobytes()
 
         img = Image.open(io.BytesIO(board_bytes))
@@ -201,7 +211,9 @@ def process_board_image(board_img, original_img_bytes=None):
             board_bytes = buffer.getvalue()
 
         encoded_string = base64.b64encode(board_bytes).decode('utf-8')
-               payload = {
+        
+        # (Corregida la indentación aquí)
+        payload = {
             "board_orientation": "predict",
             "cropped": True,
             "current_player": "white",
@@ -268,6 +280,7 @@ def process_board_image(board_img, original_img_bytes=None):
             print(f"[ERROR] {error_msg}")
 
         # --- Generar miniatura (200x200) ---
+        # Usamos board_img original para que la miniatura se vea bonita y no en blanco y negro puro
         if board_img is not None and len(board_img.shape) == 3:
             h, w = board_img.shape[:2]
             size = 200
